@@ -35,16 +35,29 @@ class SmbBrowser(
 
     private fun ensureShare(): DiskShare {
         share?.let { return it }
-        val conn = client.connect(server.host).also { connection = it }
-        val auth = AuthenticationContext(
-            server.username,
-            password.toCharArray(),
-            server.domain ?: "",
-        )
-        val sess = conn.authenticate(auth).also { session = it }
-        val sh = sess.connectShare(server.share) as DiskShare
-        share = sh
-        return sh
+        // Build connection/session/share locally first so a failure in any
+        // step doesn't half-populate the fields and leak resources on the
+        // next retry. We only commit to the fields once all three succeed.
+        var conn: Connection? = null
+        var sess: Session? = null
+        try {
+            conn = client.connect(server.host)
+            val auth = AuthenticationContext(
+                server.username,
+                password.toCharArray(),
+                server.domain ?: "",
+            )
+            sess = conn.authenticate(auth)
+            val sh = sess.connectShare(server.share) as DiskShare
+            connection = conn
+            session = sess
+            share = sh
+            return sh
+        } catch (t: Throwable) {
+            runCatching { sess?.close() }
+            runCatching { conn?.close() }
+            throw t
+        }
     }
 
     fun list(folder: String): List<Entry> {

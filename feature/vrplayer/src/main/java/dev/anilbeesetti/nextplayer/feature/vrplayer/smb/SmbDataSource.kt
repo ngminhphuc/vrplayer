@@ -27,7 +27,9 @@ class SmbDataSource(
     override fun open(dataSpec: DataSpec): Long {
         transferInitializing(dataSpec)
         val uri = dataSpec.uri
-        require(uri.scheme == "smb") { "SmbDataSource expects smb:// URI" }
+        if (!uri.scheme.equals("smb", ignoreCase = true)) {
+            throw IOException("SmbDataSource expects smb:// URI, got $uri")
+        }
 
         val host = uri.host ?: throw IOException("Missing host in $uri")
         val pathParts = uri.pathSegments
