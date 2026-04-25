@@ -24,15 +24,18 @@ public:
     static bool init();
     static void shutdown();
 
-    /** Renders the cinema quad into the given GL texture (one of an OpenXR
-     *  swapchain image set). The texture is bound as a colour attachment of an
-     *  internal FBO; depth is stored separately. */
+    /** Renders the cinema scene (skybox + curved screen + pointers) into the
+     *  given OpenXR swapchain colour image. */
     static void renderEye(uint32_t glTextureId, int32_t width, int32_t height,
                           const XrView& view);
 
-    /** Allocates the external OES texture used by ExoPlayer's SurfaceTexture.
-     *  Returns the GL texture id; caller passes it to Kotlin. */
+    /** Allocates the external OES texture used by ExoPlayer's SurfaceTexture. */
     static uint32_t createVideoTexture();
+
+    /** Updates pointer poses from the input subsystem. Called once per frame
+     *  before rendering both eyes. Inactive controllers pass false to hide. */
+    static void setPointer(bool leftActive, const XrPosef& leftPose,
+                           bool rightActive, const XrPosef& rightPose);
 };
 
 }  // namespace vrplayer

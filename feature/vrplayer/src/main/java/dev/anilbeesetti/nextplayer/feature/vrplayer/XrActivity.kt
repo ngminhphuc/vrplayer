@@ -1,7 +1,9 @@
 package dev.anilbeesetti.nextplayer.feature.vrplayer
 
 import android.app.NativeActivity
+import android.content.Context
 import android.graphics.SurfaceTexture
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.Surface
 import androidx.media3.common.MediaItem
@@ -117,10 +119,89 @@ class XrActivity : NativeActivity() {
         surfaceTexture?.getTransformMatrix(out)
     }
 
+    /** JNI: trigger pressed — toggle play/pause. Marshalled to main thread. */
+    @Suppress("unused")
+    fun togglePlayPause() {
+        runOnUiThread {
+            player?.let { it.playWhenReady = !it.playWhenReady }
+        }
+    }
+
+    /** JNI: thumbstick X past threshold — seek by [deltaMs]. */
+    @Suppress("unused")
+    fun seekDelta(deltaMs: Int) {
+        runOnUiThread {
+            player?.let {
+                val target = (it.currentPosition + deltaMs).coerceAtLeast(0L)
+                it.seekTo(target)
+            }
+        }
+    }
+
+    /** JNI: thumbstick Y — change ExoPlayer volume by [delta] (clamped 0..1). */
+    @Suppress("unused")
+    fun volumeDelta(delta: Float) {
+        runOnUiThread {
+            player?.let {
+                val v = (it.volume + delta).coerceIn(0f, 1f)
+                it.volume = v
+            }
+        }
+    }
+
+    /** JNI: persist screen transform from grip-drag. Stored via SharedPreferences
+     *  (DataStore wiring lands in Stage 1 Sprint 2 alongside the picker). */
+    @Suppress("unused")
+    fun persistScreenTransform(
+        radius: Float,
+        arc: Float,
+        height: Float,
+        yaw: Float,
+        yOffset: Float,
+        zOffset: Float,
+    ) {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putFloat(KEY_RADIUS, radius)
+            .putFloat(KEY_ARC, arc)
+            .putFloat(KEY_HEIGHT, height)
+            .putFloat(KEY_YAW, yaw)
+            .putFloat(KEY_Y_OFFSET, yOffset)
+            .putFloat(KEY_Z_OFFSET, zOffset)
+            .apply()
+    }
+
+    /** JNI: load persisted transform during native init.
+     *  Returns 6 floats: radius, arc, height, yaw, yOffset, zOffset.
+     *  Matches the native [XrSession::applyScreenTransform] signature. */
+    @Suppress("unused")
+    fun loadScreenTransform(): FloatArray {
+        val sp = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return floatArrayOf(
+            sp.getFloat(KEY_RADIUS, 3f),
+            sp.getFloat(KEY_ARC, 2.0944f),
+            sp.getFloat(KEY_HEIGHT, 1.6f),
+            sp.getFloat(KEY_YAW, 0f),
+            sp.getFloat(KEY_Y_OFFSET, 1.5f),
+            sp.getFloat(KEY_Z_OFFSET, 0f),
+        )
+    }
+
+    /** Suppress AudioManager unused-import lint — reserved for Stage 1 Sprint 2
+     *  global volume integration. */
+    @Suppress("unused")
+    private fun audioStream(): Int = AudioManager.STREAM_MUSIC
+
     companion object {
         private const val TAG = "VrPlayer/XrActivity"
         private const val DEFAULT_WIDTH = 1920
         private const val DEFAULT_HEIGHT = 1080
+        private const val PREFS = "vrplayer_screen"
+        private const val KEY_RADIUS = "radius"
+        private const val KEY_ARC = "arc"
+        private const val KEY_HEIGHT = "height"
+        private const val KEY_YAW = "yaw"
+        private const val KEY_Y_OFFSET = "y_off"
+        private const val KEY_Z_OFFSET = "z_off"
 
         init {
             // Loaded by NativeActivity via android.app.lib_name meta-data, but
