@@ -58,21 +58,11 @@ class XrActivity : NativeActivity() {
         }
     }
     private val proximity by lazy {
-        var pausedByProximity = false
         ProximityAutoPause(
             context = this,
-            onUnmounted = {
-                if (player?.playWhenReady == true) {
-                    pausedByProximity = true
-                    player?.playWhenReady = false
-                }
-            },
-            onRemounted = {
-                if (pausedByProximity) {
-                    pausedByProximity = false
-                    player?.playWhenReady = true
-                }
-            },
+            isPlaying = { player?.playWhenReady == true },
+            pausePlayer = { player?.playWhenReady = false },
+            resumePlayer = { player?.playWhenReady = true },
         )
     }
     private var resumeWriterJob: Job? = null
