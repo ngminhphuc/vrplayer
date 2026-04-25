@@ -395,7 +395,7 @@ void XrSession::renderFrame() {
 
             // Render the cinema quad into this eye's image.
             GlRenderer::renderEye(sc.images[imgIdx].image, sc.width, sc.height,
-                                  mViews[i]);
+                                  mViews[i], static_cast<int>(i));
 
             XrSwapchainImageReleaseInfo rInfo{
                 XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

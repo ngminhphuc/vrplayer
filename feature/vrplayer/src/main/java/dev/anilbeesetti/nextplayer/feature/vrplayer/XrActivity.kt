@@ -18,6 +18,8 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionDetector
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProximityAutoPause
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.SleepTimer
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoDetector
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,6 +77,7 @@ class XrActivity : NativeActivity() {
     private var resumeWriterJob: Job? = null
     private var currentPath: String? = null
     private var projectionOverride: ProjectionMode? = null
+    private var stereoOverride: StereoMode? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,8 +115,10 @@ class XrActivity : NativeActivity() {
             pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         }
         pickerHost.onProjectionChange = { mode -> setProjectionOverride(mode) }
+        pickerHost.onStereoChange = { mode -> setStereoOverride(mode) }
         pickerHost.onSnapFront = { snapFront() }
         pickerHost.setProjectionMode(projectionOverride)
+        pickerHost.setStereoMode(stereoOverride)
         pickerHost.setUrlHistory(urlStore.list())
         pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         mainScope.launch {
@@ -186,11 +191,22 @@ class XrActivity : NativeActivity() {
         val mode = projectionOverride ?: ProjectionDetector.detect(path)
         nativeSetProjection(mode.raw)
         if (mode != ProjectionMode.OFF) nativeSnapFront()
+        applyStereoFor(path)
+    }
+
+    private fun applyStereoFor(path: String) {
+        val s = stereoOverride ?: StereoDetector.detect(path)
+        nativeSetStereo(s.raw)
     }
 
     fun setProjectionOverride(mode: ProjectionMode?) {
         projectionOverride = mode
         currentPath?.let { applyProjectionFor(it) }
+    }
+
+    fun setStereoOverride(mode: StereoMode?) {
+        stereoOverride = mode
+        currentPath?.let { applyStereoFor(it) }
     }
 
     fun snapFront() {
@@ -200,6 +216,7 @@ class XrActivity : NativeActivity() {
     private external fun nativeSetProjection(mode: Int)
     private external fun nativeSnapFront()
     private external fun nativeRotateYaw(degrees: Float)
+    private external fun nativeSetStereo(mode: Int)
 
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()

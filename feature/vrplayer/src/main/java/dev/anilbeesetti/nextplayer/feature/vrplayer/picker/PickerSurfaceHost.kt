@@ -42,12 +42,15 @@ class PickerSurfaceHost(
     private val sleepMinutes = mutableStateOf(0)
     private val projectionMode =
         mutableStateOf<dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode?>(null)
+    private val stereoMode =
+        mutableStateOf<dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?>(null)
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
     var onUrlSubmit: ((String) -> Unit)? = null
     var onSleepTimerArm: ((Int) -> Unit)? = null
     var onProjectionChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode?) -> Unit)? = null
+    var onStereoChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?) -> Unit)? = null
     var onSnapFront: (() -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
@@ -106,6 +109,10 @@ class PickerSurfaceHost(
         projectionMode.value = mode
     }
 
+    fun setStereoMode(mode: dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?) {
+        stereoMode.value = mode
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -148,6 +155,11 @@ class PickerSurfaceHost(
                     onProjectionChange = { m ->
                         projectionMode.value = m
                         onProjectionChange?.invoke(m)
+                    },
+                    stereoMode = stereoMode.value,
+                    onStereoChange = { m ->
+                        stereoMode.value = m
+                        onStereoChange?.invoke(m)
                     },
                     onSnapFront = { onSnapFront?.invoke() },
                     lastPlayedPath = lastPlayed.value,

@@ -27,7 +27,7 @@ public:
     /** Renders the cinema scene (skybox + curved screen + pointers) into the
      *  given OpenXR swapchain colour image. */
     static void renderEye(uint32_t glTextureId, int32_t width, int32_t height,
-                          const XrView& view);
+                          const XrView& view, int eyeIndex);
 
     /** Allocates the external OES texture used by ExoPlayer's SurfaceTexture. */
     static uint32_t createVideoTexture();
