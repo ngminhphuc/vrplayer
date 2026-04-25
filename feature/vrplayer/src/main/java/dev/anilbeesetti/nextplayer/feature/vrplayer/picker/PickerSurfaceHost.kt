@@ -3,6 +3,8 @@ package dev.anilbeesetti.nextplayer.feature.vrplayer.picker
 import android.content.Context
 import android.graphics.PixelFormat
 import android.graphics.SurfaceTexture
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.PixelCopy
@@ -47,20 +49,26 @@ class PickerSurfaceHost(
         val s = Surface(st)
         surfaceTexture = st
         surface = s
-        attachComposeView()
+        // attachComposeView phải chạy trên main thread vì WindowManager.addView
+        // và ComposeView setContent đều require UI thread. Native gọi từ render
+        // thread nên cần post sang. SurfaceTexture/Surface đã được tạo trên
+        // GL thread (yêu cầu của OES texture binding) nên không cần post chúng.
+        Handler(Looper.getMainLooper()).post { attachComposeView() }
         return s
     }
 
     fun releaseSurface() {
-        composeView?.let { v ->
-            // ComposeView được attach qua WindowManager.addView, parent là
-            // ViewRootImpl (không phải ViewGroup), nên phải remove qua WM.
-            runCatching {
-                val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                wm.removeViewImmediate(v)
+        // releaseSurface có thể được gọi từ bất kỳ thread nào (lifecycle hook,
+        // shutdown, ...). WindowManager.removeView phải trên main thread.
+        Handler(Looper.getMainLooper()).post {
+            composeView?.let { v ->
+                runCatching {
+                    val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    wm.removeViewImmediate(v)
+                }
             }
+            composeView = null
         }
-        composeView = null
         surface?.release()
         surface = null
         surfaceTexture?.release()

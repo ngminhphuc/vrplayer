@@ -66,7 +66,11 @@ GLuint compile(GLenum type, const char* src) {
 bool PickerQuad::init() {
     GLuint vs = compile(GL_VERTEX_SHADER, kVS);
     GLuint fs = compile(GL_FRAGMENT_SHADER, kFS);
-    if (!vs || !fs) return false;
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return false;
+    }
     sProgram = glCreateProgram();
     glAttachShader(sProgram, vs);
     glAttachShader(sProgram, fs);
