@@ -24,6 +24,10 @@ class ProximityAutoPause(
     private var wasNear = true
 
     fun start() {
+        // Reset baseline mỗi lần re-register: nếu user tháo headset trong
+        // lúc app pause, lần resume tiếp theo phải coi như đang ở trạng
+        // thái "near" để first reading "far" còn fire onUnmounted.
+        wasNear = true
         sensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }
 
