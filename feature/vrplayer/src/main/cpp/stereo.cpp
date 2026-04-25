@@ -1,20 +1,24 @@
 #include "stereo.h"
 
+#include <atomic>
+
 namespace vrplayer {
 
 namespace {
-Stereo::Mode sMode = Stereo::Mode::Mono;
+// Cross-thread: written from JNI (UI thread) via Stereo::setMode, read
+// from native render thread in Stereo::uvScaleOffset / Stereo::mode.
+std::atomic<Stereo::Mode> sMode{Stereo::Mode::Mono};
 }  // namespace
 
-void Stereo::setMode(Mode m) { sMode = m; }
-Stereo::Mode Stereo::mode() { return sMode; }
+void Stereo::setMode(Mode m) { sMode.store(m, std::memory_order_release); }
+Stereo::Mode Stereo::mode() { return sMode.load(std::memory_order_acquire); }
 
 void Stereo::uvScaleOffset(int eyeIndex, float out[4]) {
     // Default: identity (full texture for both eyes).
     out[0] = 1.f;  out[1] = 1.f;  out[2] = 0.f;  out[3] = 0.f;
 
     bool isLeft = (eyeIndex == 0);
-    switch (sMode) {
+    switch (sMode.load(std::memory_order_acquire)) {
         case Mode::Mono:
             return;
         case Mode::SbsLeftRight:
