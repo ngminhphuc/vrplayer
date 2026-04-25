@@ -253,11 +253,22 @@ void XrSession::processInput(XrTime predictedTime) {
     if (mInput.triggerPressedEdge) {
         if (PickerQuad::visible()) {
             float u = 0.f, v = 0.f;
-            const auto& aim = (mInput.rightAim.locationFlags &
-                                XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)
-                                  ? mInput.rightAim
-                                  : mInput.leftAim;
-            if (PickerQuad::hitTest(aim.pose, &u, &v)) {
+            // Use the aim of whichever hand actually pulled the trigger.
+            // If both fire in the same frame, prefer right; if neither
+            // (shouldn't happen because triggerPressedEdge implies at
+            // least one), fall back to whichever has valid orientation.
+            const XrSpaceLocation* aim = nullptr;
+            if (mInput.triggerRightEdge) {
+                aim = &mInput.rightAim;
+            } else if (mInput.triggerLeftEdge) {
+                aim = &mInput.leftAim;
+            } else if (mInput.rightAim.locationFlags &
+                       XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) {
+                aim = &mInput.rightAim;
+            } else {
+                aim = &mInput.leftAim;
+            }
+            if (PickerQuad::hitTest(aim->pose, &u, &v)) {
                 VideoBridge::injectPickerTap(u, v);
                 PickerQuad::setVisible(false);
             }

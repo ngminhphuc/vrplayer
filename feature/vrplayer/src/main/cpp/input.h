@@ -35,7 +35,9 @@ public:
     XrSpaceLocation rightAim{XR_TYPE_SPACE_LOCATION};
 
     // Edge-triggered events; consumed by reading and clearing externally.
-    bool triggerPressedEdge = false;  // play/pause
+    bool triggerPressedEdge = false;  // play/pause — true if either fired
+    bool triggerLeftEdge = false;     // which hand fired triggerPressedEdge
+    bool triggerRightEdge = false;
     bool menuTapEdge = false;         // recenter
     bool gripLeftHeld = false;
     bool gripRightHeld = false;
