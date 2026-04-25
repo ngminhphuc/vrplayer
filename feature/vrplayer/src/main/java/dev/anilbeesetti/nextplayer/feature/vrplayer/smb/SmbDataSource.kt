@@ -19,6 +19,7 @@ class SmbDataSource(
 
     private var browser: SmbBrowser? = null
     private var file: SmbFile? = null
+    private var openedUri: android.net.Uri? = null
     private var bytesRemaining: Long = 0
     private var position: Long = 0
     private var opened = false
@@ -40,6 +41,7 @@ class SmbDataSource(
 
         val br = SmbBrowser(server, pwd).also { browser = it }
         val f = br.open(remotePath).also { file = it }
+        openedUri = uri
 
         val length = f.fileInformation.standardInformation.endOfFile
         position = dataSpec.position
@@ -66,9 +68,7 @@ class SmbDataSource(
         return read
     }
 
-    override fun getUri() = browser?.let {
-        android.net.Uri.parse("smb://$it")
-    }
+    override fun getUri(): android.net.Uri? = openedUri
 
     override fun close() {
         if (opened) {
@@ -79,6 +79,7 @@ class SmbDataSource(
         runCatching { browser?.close() }
         file = null
         browser = null
+        openedUri = null
         bytesRemaining = 0
         position = 0
     }
