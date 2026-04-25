@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "math_util.h"
+#include "picker_quad.h"
 #include "pointer.h"
 #include "quad.h"
 #include "screen.h"
@@ -43,10 +44,12 @@ bool GlRenderer::init() {
     Screen::init();
     Skybox::init();
     Pointer::init();
+    PickerQuad::init();
     return true;
 }
 
 void GlRenderer::shutdown() {
+    PickerQuad::shutdown();
     Pointer::shutdown();
     Skybox::shutdown();
     Screen::shutdown();
@@ -110,7 +113,16 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
     VideoBridge::getTransformMatrix(texMatrix);
     Screen::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
 
-    // 3. Laser pointers from active controllers.
+    // 3. Picker (if visible). Pull its surface texture too.
+    if (PickerQuad::visible() && VideoBridge::pickerTextureId() != 0) {
+        VideoBridge::updatePickerTexImage();
+        float pickerTexMat[16];
+        VideoBridge::getPickerTransformMatrix(pickerTexMat);
+        PickerQuad::draw(VideoBridge::pickerTextureId(), proj, viewMat,
+                         pickerTexMat);
+    }
+
+    // 4. Laser pointers from active controllers.
     if (sShowLeftPointer) Pointer::draw(sLeftPose, proj, viewMat);
     if (sShowRightPointer) Pointer::draw(sRightPose, proj, viewMat);
 

@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Storage permissions for the world-space picker. Quest 2 = Android
+         11, Quest 3 = Android 12+. READ_MEDIA_VIDEO is the modern (API 33+)
+         scoped form; the legacy READ_EXTERNAL_STORAGE is kept for older
+         system images. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- Quest device & VR feature requirements -->
     <uses-feature
         android:name="android.hardware.vr.headtracking"

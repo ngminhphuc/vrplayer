@@ -2,6 +2,7 @@
 
 #include "gl_renderer.h"
 #include "log.h"
+#include "picker_quad.h"
 #include "screen.h"
 #include "video_bridge.h"
 
@@ -247,11 +248,32 @@ void XrSession::processInput(XrTime predictedTime) {
     if (!mInputAttached) return;
     mInput.sync(mSession, mAppSpace, predictedTime);
 
+    // When the picker is open, trigger acts as "click on hovered item".
+    // Otherwise it's the global play/pause shortcut.
     if (mInput.triggerPressedEdge) {
-        VideoBridge::togglePlayPause();
+        if (PickerQuad::visible()) {
+            float u = 0.f, v = 0.f;
+            const auto& aim = (mInput.rightAim.locationFlags &
+                                XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)
+                                  ? mInput.rightAim
+                                  : mInput.leftAim;
+            if (PickerQuad::hitTest(aim.pose, &u, &v)) {
+                VideoBridge::injectPickerTap(u, v);
+                PickerQuad::setVisible(false);
+            }
+        } else {
+            VideoBridge::togglePlayPause();
+        }
     }
     if (mInput.menuTapEdge) {
-        recenter();
+        // Tap menu = toggle picker. Long-press = recenter (Sprint 3 will
+        // disambiguate with a press-duration timer).
+        const bool nowVisible = !PickerQuad::visible();
+        PickerQuad::setVisible(nowVisible);
+        if (nowVisible && VideoBridge::pickerTextureId() == 0) {
+            VideoBridge::requestPickerSurface();
+        }
+        if (!nowVisible) recenter();
     }
 
     // Thumbstick X -> seek (rate-limited to one event / 250 ms).

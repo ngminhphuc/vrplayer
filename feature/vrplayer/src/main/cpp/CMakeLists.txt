@@ -30,6 +30,7 @@ add_library(vrplayer SHARED
     screen.cpp
     skybox.cpp
     pointer.cpp
+    picker_quad.cpp
     input.cpp
     video_bridge.cpp
 )
