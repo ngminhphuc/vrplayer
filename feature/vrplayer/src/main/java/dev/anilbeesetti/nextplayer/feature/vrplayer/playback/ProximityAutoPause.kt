@@ -45,6 +45,15 @@ class ProximityAutoPause(
         sm.unregisterListener(this)
     }
 
+    /**
+     * Clear the "we paused playback" flag. Other components that pause the
+     * player (e.g. SleepTimer, manual togglePlayPause) must call this so we
+     * don't auto-resume on remount and undo their pause.
+     */
+    fun clearPausedFlag() {
+        pausedByUs = false
+    }
+
     override fun onSensorChanged(event: SensorEvent) {
         val s = event.sensor ?: return
         val near = event.values[0] < (s.maximumRange.takeIf { it > 0f } ?: 5f)

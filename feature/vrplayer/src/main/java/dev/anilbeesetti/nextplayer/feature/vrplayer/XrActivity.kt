@@ -55,6 +55,11 @@ class XrActivity : NativeActivity() {
         SleepTimer {
             player?.playWhenReady = false
             pickerHost.setSleepMinutes(0)
+            // Sleep timer pause is intentional. If proximity later sees a
+            // remount it must NOT auto-resume — clear our "we paused it"
+            // flag so the player stays paused until the user re-arms or
+            // hits play.
+            proximity.clearPausedFlag()
         }
     }
     private val proximity by lazy {
@@ -260,7 +265,15 @@ class XrActivity : NativeActivity() {
     @Suppress("unused")
     fun togglePlayPause() {
         runOnUiThread {
-            player?.let { it.playWhenReady = !it.playWhenReady }
+            player?.let {
+                it.playWhenReady = !it.playWhenReady
+                if (!it.playWhenReady) {
+                    // Manual pause: clear proximity's "we paused it" flag
+                    // so a subsequent remount doesn't auto-resume against
+                    // the user's intent.
+                    proximity.clearPausedFlag()
+                }
+            }
         }
     }
 
