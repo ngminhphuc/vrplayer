@@ -6,6 +6,7 @@
 #include <GLES3/gl3.h>
 #include <GLES2/gl2ext.h>
 
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -49,8 +50,10 @@ GLuint sVao360 = 0, sVbo360 = 0, sIbo360 = 0;
 GLuint sVao180 = 0, sVbo180 = 0, sIbo180 = 0;
 GLsizei sIndexCount360 = 0;
 GLsizei sIndexCount180 = 0;
-Sphere::Mode sMode = Sphere::Mode::Off;
-float sYawOffsetRad = 0.f;
+// Cross-thread: written from JNI (UI thread), read from native render
+// thread. Use atomics so the compiler can't reorder/cache reads.
+std::atomic<Sphere::Mode> sMode{Sphere::Mode::Off};
+std::atomic<float> sYawOffsetRad{0.f};
 
 GLuint compile(GLenum type, const char* src) {
     GLuint sh = glCreateShader(type);
@@ -184,18 +187,19 @@ void Sphere::shutdown() {
     sProgram = 0;
 }
 
-void Sphere::setMode(Mode m) { sMode = m; }
-Sphere::Mode Sphere::mode() { return sMode; }
+void Sphere::setMode(Mode m) { sMode.store(m, std::memory_order_release); }
+Sphere::Mode Sphere::mode() { return sMode.load(std::memory_order_acquire); }
 void Sphere::setYawOffsetDeg(float deg) {
-    sYawOffsetRad = deg * static_cast<float>(M_PI) / 180.f;
+    sYawOffsetRad.store(deg * static_cast<float>(M_PI) / 180.f, std::memory_order_release);
 }
 
 void Sphere::draw(uint32_t tex, const float* proj, const float* view,
                   const float* texMatrix) {
-    if (sMode == Mode::Off) return;
-    GLuint vao = (sMode == Mode::Equirect360) ? sVao360 : sVao180;
+    const Mode m = sMode.load(std::memory_order_acquire);
+    if (m == Mode::Off) return;
+    GLuint vao = (m == Mode::Equirect360) ? sVao360 : sVao180;
     GLsizei count =
-        (sMode == Mode::Equirect360) ? sIndexCount360 : sIndexCount180;
+        (m == Mode::Equirect360) ? sIndexCount360 : sIndexCount180;
     if (!vao || !count) return;
 
     glUseProgram(sProgram);
@@ -204,8 +208,9 @@ void Sphere::draw(uint32_t tex, const float* proj, const float* view,
     // small helper.
     float yawMat[16];
     mu::identity(yawMat);
-    const float c = std::cos(sYawOffsetRad);
-    const float s = std::sin(sYawOffsetRad);
+    const float yawOffset = sYawOffsetRad.load(std::memory_order_acquire);
+    const float c = std::cos(yawOffset);
+    const float s = std::sin(yawOffset);
     yawMat[0] = c;  yawMat[2] = s;
     yawMat[8] = -s; yawMat[10] = c;
     float rotated[16];
