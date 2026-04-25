@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
@@ -67,6 +68,8 @@ fun VrPickerScreen(
     onSmbAdd: (host: String, share: String, user: String, pass: String, domain: String?) -> Unit = { _, _, _, _, _ -> },
     onSmbRemove: (id: String) -> Unit = {},
     onSmbPlay: (server: SmbServer, path: String) -> Unit = { _, _ -> },
+    environmentMode: EnvironmentMode = EnvironmentMode.BlackVoid,
+    onEnvironmentChange: (EnvironmentMode) -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -93,6 +96,8 @@ fun VrPickerScreen(
                         stereoMode,
                         onStereoChange,
                         onSnapFront,
+                        environmentMode,
+                        onEnvironmentChange,
                     )
                 }
             }
@@ -245,6 +250,8 @@ private fun SettingsTab(
     stereoMode: StereoMode?,
     onStereoChange: (StereoMode?) -> Unit,
     onSnapFront: () -> Unit,
+    environmentMode: EnvironmentMode,
+    onEnvironmentChange: (EnvironmentMode) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Sleep timer", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
@@ -302,9 +309,21 @@ private fun SettingsTab(
         }
         Spacer(Modifier.height(8.dp))
         TabChip("Snap front (recenter)", false, onSnapFront)
+        Spacer(Modifier.height(16.dp))
+        Text("Môi trường", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Skybox sau lưng video. 4 preset đều thuần shader, không tốn bộ nhớ texture.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EnvironmentMode.values().forEach { m ->
+                TabChip(m.label, environmentMode == m) { onEnvironmentChange(m) }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Auto-pause khi tháo headset luôn bật.",
+            "Auto-pause khi tháo headset luôn bật. Pinch (chạm ngón trỏ-cái) cũng kích hoạt giống nút trigger nếu thiết bị bật hand-tracking.",
             color = Color(0xFF9AA3B0),
             fontSize = 16.sp,
         )

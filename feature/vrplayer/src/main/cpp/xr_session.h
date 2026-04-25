@@ -11,6 +11,7 @@
 
 #include <vector>
 
+#include "hand_tracking.h"
 #include "input.h"
 
 namespace vrplayer {
@@ -69,6 +70,7 @@ private:
 
     XrInput mInput;
     bool mInputAttached = false;
+    HandTracking mHands;
 
     // Screen transform state (mutated by grip-drag, persisted via JNI).
     struct ScreenState {

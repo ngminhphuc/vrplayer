@@ -31,6 +31,7 @@ add_library(vrplayer SHARED
     skybox.cpp
     sphere.cpp
     stereo.cpp
+    hand_tracking.cpp
     native_calls.cpp
     pointer.cpp
     picker_quad.cpp
