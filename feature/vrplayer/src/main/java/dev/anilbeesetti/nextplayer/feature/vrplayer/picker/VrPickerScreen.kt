@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 
 private enum class PickerTab { Local, Network, Settings }
 
@@ -54,6 +55,9 @@ fun VrPickerScreen(
     onUrlSubmit: (String) -> Unit,
     sleepTimerMinutes: Int,
     onSleepTimerArm: (Int) -> Unit,
+    projectionMode: ProjectionMode?,
+    onProjectionChange: (ProjectionMode?) -> Unit,
+    onSnapFront: () -> Unit,
     lastPlayedPath: String?,
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
@@ -72,7 +76,13 @@ fun VrPickerScreen(
                 when (tab) {
                     PickerTab.Local -> LocalTab(entries, lastPlayedPath, onPick)
                     PickerTab.Network -> NetworkTab(urlHistory, onPickUrl, onUrlSubmit)
-                    PickerTab.Settings -> SettingsTab(sleepTimerMinutes, onSleepTimerArm)
+                    PickerTab.Settings -> SettingsTab(
+                        sleepTimerMinutes,
+                        onSleepTimerArm,
+                        projectionMode,
+                        onProjectionChange,
+                        onSnapFront,
+                    )
                 }
             }
         }
@@ -219,6 +229,9 @@ private fun NetworkTab(
 private fun SettingsTab(
     sleepTimerMinutes: Int,
     onArm: (Int) -> Unit,
+    projectionMode: ProjectionMode?,
+    onProjectionChange: (ProjectionMode?) -> Unit,
+    onSnapFront: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Sleep timer", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
@@ -238,6 +251,27 @@ private fun SettingsTab(
                 )
             }
         }
+        Spacer(Modifier.height(16.dp))
+        Text("Hình chiếu", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Auto = phát hiện theo tên file / metadata. Manual override khi bot đoán sai.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip("Auto", projectionMode == null) { onProjectionChange(null) }
+            TabChip("Cinema", projectionMode == ProjectionMode.OFF) {
+                onProjectionChange(ProjectionMode.OFF)
+            }
+            TabChip("360°", projectionMode == ProjectionMode.EQUIRECT_360) {
+                onProjectionChange(ProjectionMode.EQUIRECT_360)
+            }
+            TabChip("180°", projectionMode == ProjectionMode.HEMISPHERE_180) {
+                onProjectionChange(ProjectionMode.HEMISPHERE_180)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        TabChip("Snap front (recenter)", false, onSnapFront)
         Spacer(Modifier.height(12.dp))
         Text(
             "Auto-pause khi tháo headset luôn bật.",

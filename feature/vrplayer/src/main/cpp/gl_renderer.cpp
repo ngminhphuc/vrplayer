@@ -7,6 +7,7 @@
 #include "quad.h"
 #include "screen.h"
 #include "skybox.h"
+#include "sphere.h"
 #include "video_bridge.h"
 
 #include <GLES3/gl3.h>
@@ -45,10 +46,12 @@ bool GlRenderer::init() {
     Skybox::init();
     Pointer::init();
     PickerQuad::init();
+    Sphere::init();
     return true;
 }
 
 void GlRenderer::shutdown() {
+    Sphere::shutdown();
     PickerQuad::shutdown();
     Pointer::shutdown();
     Skybox::shutdown();
@@ -107,11 +110,16 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
     // 1. Skybox (full-screen, depth write off).
     Skybox::draw();
 
-    // 2. Curved screen with the latest video frame.
     VideoBridge::updateTexImage();
     float texMatrix[16];
     VideoBridge::getTransformMatrix(texMatrix);
-    Screen::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
+
+    // 2. Either the cinema cylinder OR the immersive 360/180 sphere.
+    if (Sphere::mode() == Sphere::Mode::Off) {
+        Screen::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
+    } else {
+        Sphere::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
+    }
 
     // 3. Picker (if visible). Pull its surface texture too.
     if (PickerQuad::visible() && VideoBridge::pickerTextureId() != 0) {
