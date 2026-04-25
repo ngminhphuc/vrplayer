@@ -31,6 +31,7 @@ ksp = "2.1.21-2.0.2"
 ktlint = "12.3.0"
 room = "2.7.2"
 nextlib = "1.8.0-0.9.0"
+openxrLoader = "1.0.34"
 timber = "5.0.1"
 universalChardet = "2.5.0"
 
@@ -74,6 +75,7 @@ androidx-test-ext = { group = "androidx.test.ext", name = "junit-ktx", version.r
 coil-kt-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 github-albfernandez-juniversalchardet = { group="com.github.albfernandez", name = "juniversalchardet", version.ref="universalChardet" }
 github-anilbeesetti-nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlib" }
+khronos-openxr-loader = { group = "org.khronos.openxr", name = "openxr_loader_for_android", version.ref = "openxrLoader" }
 github-anilbeesetti-nextlib-mediainfo = { group = "io.github.anilbeesetti", name = "nextlib-mediainfo", version.ref = "nextlib" }
 google-android-material = { group = "com.google.android.material", name = "material", version.ref = "androidMaterial" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

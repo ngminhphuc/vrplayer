@@ -13,9 +13,28 @@ android {
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        applicationId = "dev.anilbeesetti.nextplayer"
-        versionCode = 42
-        versionName = "0.14.1"
+        applicationId = "dev.ngminhphuc.vrplayer"
+        versionCode = 100
+        versionName = "1.0.0-spike0"
+    }
+
+    flavorDimensions += "target"
+    productFlavors {
+        create("mobile") {
+            dimension = "target"
+            // existing Android phone build, kept for reference; not the focus.
+        }
+        create("quest") {
+            dimension = "target"
+            applicationIdSuffix = ".quest"
+            // Meta Horizon Store yêu cầu targetSdk >= 32; Quest 2 base = Android 10 (API 29).
+            minSdk = 29
+            targetSdk = 32
+            ndk {
+                //noinspection ChromeOsAbiSupport
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
     }
 
     buildFeatures {
@@ -60,9 +79,11 @@ android {
     splits {
         abi {
             //noinspection WrongGradleMethod
-            val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
+            val taskNames = gradle.startParameter.taskNames
+            val isBuildingBundle = taskNames.any { it.lowercase().contains("bundle") }
+            val isQuestOnly = taskNames.any { it.lowercase().contains("quest") }
 
-            isEnable = !isBuildingBundle
+            isEnable = !isBuildingBundle && !isQuestOnly
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
             isUniversalApk = true
@@ -93,6 +114,7 @@ dependencies {
     implementation(project(":feature:videopicker"))
     implementation(project(":feature:player"))
     implementation(project(":feature:settings"))
+    "questImplementation"(project(":feature:vrplayer"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

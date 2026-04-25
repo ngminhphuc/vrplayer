@@ -42,8 +42,32 @@
 
 Tổng: ~7–8 ngày dev (1 sprint 2 tuần có buffer).
 
+## Tiến độ
+
+### Đã làm trên CI build host (Linux x86_64) — **chưa test trên Quest hardware**
+
+- Module `feature:vrplayer` với Gradle + NDK + CMake.
+- `XrActivity.kt` kế thừa `NativeActivity`, ExoPlayer init + JNI surface bridge.
+- Native: OpenXR loader init (GLES extension), instance / system / session / swapchain / reference space.
+- Vòng render `xrWaitFrame`/`xrBeginFrame`/`xrEndFrame` cho stereo views, mỗi mắt vẽ một quad với `samplerExternalOES` map vào video texture.
+- Bridge `acquireVideoSurface(textureId)` / `updateTexImage()` / `getTransformMatrix()` từ Kotlin → JNI.
+- Build flavor `quest` (arm64-v8a) trong `:app`, override manifest để Quest launcher chỉ thấy `XrActivity`.
+- Build thành công `./gradlew :app:assembleQuestDebug` (APK ~91 MB) và `./gradlew :feature:vrplayer:ktlintCheck`.
+- APK chứa `lib/arm64-v8a/libvrplayer.so` + `libopenxr_loader.so`; manifest có `com.oculus.intent.category.VR`, `com.samsung.android.vr.application.mode=vr_only`, `supportedDevices=quest2|quest3|questpro`.
+
+### Cần test trên Quest hardware (block bởi thiết bị thật)
+
+- [ ] Cài APK lên Q2 & Q3 qua `adb install -r app/build/outputs/apk/quest/debug/app-quest-debug.apk`.
+- [ ] Khởi động hiện scene VR, không phải 2D launcher.
+- [ ] Quad trước mặt phát video ≥ 60s không crash, frame time ≤ 13.8 ms (Q2 @ 72 Hz).
+- [ ] Khi dừng app, ExoPlayer release sạch không leak surface (`adb shell dumpsys gfxinfo`).
+- [ ] Đặt một file `sample/spike0_sample.mp4` vào `feature/vrplayer/src/main/assets/` (chưa bundled — để file build nhẹ và tránh license).
+- [ ] Quay demo video.
+
 ## Definition of Done
 
+- [x] Code build qua `assembleQuestDebug`, ktlint sạch.
+- [x] APK chứa đúng native lib + manifest VR.
 - [ ] Cài APK lên Q2 & Q3 qua `adb install`.
 - [ ] Khởi động hiện scene VR, không phải 2D launcher.
 - [ ] Quad trước mặt phát video ≥ 60s không crash, frame time ≤ 13.8 ms (Q2 @ 72 Hz).

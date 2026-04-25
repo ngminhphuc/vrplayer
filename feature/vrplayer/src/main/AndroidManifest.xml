@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Quest device & VR feature requirements -->
+    <uses-feature
+        android:name="android.hardware.vr.headtracking"
+        android:required="true"
+        android:version="1" />
+
+    <!-- Tells Quest launcher this is a VR app -->
+    <uses-feature
+        android:name="oculus.software.handtracking"
+        android:required="false" />
+
+    <application>
+
+        <!-- Mark whole app as VR-only on Oculus / Horizon OS. The actual
+             VR entry point activity inherits this flag. -->
+        <meta-data
+            android:name="com.samsung.android.vr.application.mode"
+            android:value="vr_only" />
+        <meta-data
+            android:name="com.oculus.supportedDevices"
+            android:value="quest2|quest3|questpro" />
+        <meta-data
+            android:name="com.oculus.handtracking.frequency"
+            android:value="HIGH" />
+        <meta-data
+            android:name="com.oculus.handtracking.version"
+            android:value="V2.0" />
+
+        <activity
+            android:name=".XrActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|uiMode"
+            android:resizeableActivity="false"
+            android:screenOrientation="landscape"
+            android:excludeFromRecents="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity">
+
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="vrplayer" />
+            <!-- Marks the activity as a VR-mode activity for the Oculus runtime. -->
+            <meta-data
+                android:name="com.oculus.vr.focusaware"
+                android:value="true" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.oculus.intent.category.VR" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
