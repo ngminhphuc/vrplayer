@@ -151,13 +151,22 @@ bool Sphere::init() {
     sLocTexMat = glGetUniformLocation(sProgram, "uTexMatrix");
 
     const float twoPi = static_cast<float>(2 * M_PI);
+    const float pi = static_cast<float>(M_PI);
     const float halfPi = static_cast<float>(M_PI / 2);
 
-    Mesh full = buildSphere(0.f, twoPi, 0.f, 1.f);
+    // OpenXR forward is -Z. Vertex formula is x = R*cos(yaw), z = R*sin(yaw),
+    // so -Z corresponds to yaw = 3π/2 (or equivalently -π/2). Standard
+    // equirectangular video has its forward at u = 0.5; therefore the yaw
+    // range that maps the front to u = 0.5 is [π/2, π/2 + 2π].
+    Mesh full = buildSphere(halfPi, halfPi + twoPi, 0.f, 1.f);
     uploadMesh(full, sVao360, sVbo360, sIbo360, sIndexCount360);
 
-    // Hemisphere covers yaw [-π/2..π/2] but maps to full UV — file is VR180.
-    Mesh half = buildSphere(-halfPi, halfPi, 0.f, 1.f);
+    // VR180 hemisphere: center the front half on -Z. Yaw range [-π, 0]
+    // means the centre at -π/2 = -Z is at u = 0.5; left edge at -π = +X
+    // (left of viewer), right edge at 0 = +X actually +X… correction:
+    // yaw=-π maps to (R*cos(-π), 0, R*sin(-π)) = (-R, 0, 0) = -X (left),
+    // yaw= 0 maps to (R, 0, 0) = +X (right), centre yaw=-π/2 = -Z (front).
+    Mesh half = buildSphere(-pi, 0.f, 0.f, 1.f);
     uploadMesh(half, sVao180, sVbo180, sIbo180, sIndexCount180);
     return true;
 }

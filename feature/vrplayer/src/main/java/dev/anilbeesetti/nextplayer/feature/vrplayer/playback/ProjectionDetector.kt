@@ -49,6 +49,7 @@ object ProjectionDetector {
         try {
             extractor.setDataSource(path)
         } catch (e: Exception) {
+            extractor.release()
             return ProjectionMode.OFF
         }
         try {

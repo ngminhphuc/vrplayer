@@ -155,6 +155,10 @@ class XrActivity : NativeActivity() {
             seekTo(resumePos)
             playWhenReady = true
         }
+        // Resume must keep its last projection. Without this, a 360°/180°
+        // file restored from resumeStore would silently fall back to the
+        // cinema cylinder until the user re-picked a file.
+        resumePath?.let { applyProjectionFor(it) }
     }
 
     private fun playEntry(entry: VideoEntry) {
