@@ -81,6 +81,14 @@ void VideoBridge::detach(JNIEnv* env) {
     if (sActivityRef) env->DeleteGlobalRef(sActivityRef);
     sActivityRef = nullptr;
     sAcquireSurface = sUpdateTexImage = sGetTransformMatrix = nullptr;
+    sTogglePlayPause = sSeekDelta = sVolumeDelta = sPersistTransform = nullptr;
+    sAcquirePicker = sUpdatePicker = sGetPickerTexMat = nullptr;
+    sInjectPickerTap = sPickerWidth = sPickerHeight = nullptr;
+    // GL textures live on the render thread's context which is torn down
+    // alongside the activity, so reset the cached id to force a re-allocate
+    // on the next attach (avoids handing Kotlin a stale handle on relaunch).
+    sTextureId = 0;
+    sPickerTexId = 0;
 }
 
 void VideoBridge::requestSurface() {
@@ -217,10 +225,9 @@ void VideoBridge::updatePickerTexImage() {
 }
 
 void VideoBridge::getPickerTransformMatrix(float out[16]) {
-    if (!sActivityRef || !sGetPickerTexMat) {
-        for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
-        return;
-    }
+    // Identity fallback — fill before any early-return path.
+    for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
+    if (!sActivityRef || !sGetPickerTexMat) return;
     bool need = false;
     JNIEnv* env = attachEnv(&need);
     if (!env) return;

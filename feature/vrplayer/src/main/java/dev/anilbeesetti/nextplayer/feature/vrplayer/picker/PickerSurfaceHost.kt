@@ -8,7 +8,6 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.Surface
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -54,7 +53,12 @@ class PickerSurfaceHost(
 
     fun releaseSurface() {
         composeView?.let { v ->
-            (v.parent as? ViewGroup)?.removeView(v)
+            // ComposeView được attach qua WindowManager.addView, parent là
+            // ViewRootImpl (không phải ViewGroup), nên phải remove qua WM.
+            runCatching {
+                val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                wm.removeViewImmediate(v)
+            }
         }
         composeView = null
         surface?.release()
