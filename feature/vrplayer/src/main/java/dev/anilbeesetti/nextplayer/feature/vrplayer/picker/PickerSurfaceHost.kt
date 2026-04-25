@@ -37,9 +37,14 @@ class PickerSurfaceHost(
     private var surface: Surface? = null
     private var composeView: ComposeView? = null
     private val entries: SnapshotStateList<VideoEntry> = mutableListOf<VideoEntry>().toMutableStateList()
+    private val urlHistory: SnapshotStateList<String> = mutableListOf<String>().toMutableStateList()
     private val lastPlayed = mutableStateOf<String?>(null)
+    private val sleepMinutes = mutableStateOf(0)
 
     var onPick: ((VideoEntry) -> Unit)? = null
+    var onPickUrl: ((String) -> Unit)? = null
+    var onUrlSubmit: ((String) -> Unit)? = null
+    var onSleepTimerArm: ((Int) -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
     fun acquirePickerSurface(textureId: Int): Surface {
@@ -84,6 +89,15 @@ class PickerSurfaceHost(
         lastPlayed.value = path
     }
 
+    fun setUrlHistory(list: List<String>) {
+        urlHistory.clear()
+        urlHistory.addAll(list)
+    }
+
+    fun setSleepMinutes(min: Int) {
+        sleepMinutes.value = min
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -116,8 +130,13 @@ class PickerSurfaceHost(
             setContent {
                 VrPickerScreen(
                     entries = entries,
-                    lastPlayedPath = lastPlayed.value,
                     onPick = { picked -> onPick?.invoke(picked) },
+                    onPickUrl = { u -> onPickUrl?.invoke(u) },
+                    urlHistory = urlHistory,
+                    onUrlSubmit = { u -> onUrlSubmit?.invoke(u) },
+                    sleepTimerMinutes = sleepMinutes.value,
+                    onSleepTimerArm = { m -> onSleepTimerArm?.invoke(m) },
+                    lastPlayedPath = lastPlayed.value,
                 )
             }
             measure(
