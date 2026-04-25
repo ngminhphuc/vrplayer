@@ -44,6 +44,7 @@ class PickerSurfaceHost(
         mutableStateOf<dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode?>(null)
     private val stereoMode =
         mutableStateOf<dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?>(null)
+    private val smbServers = mutableListOf<dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer>().toMutableStateList()
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -52,6 +53,9 @@ class PickerSurfaceHost(
     var onProjectionChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode?) -> Unit)? = null
     var onStereoChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?) -> Unit)? = null
     var onSnapFront: (() -> Unit)? = null
+    var onSmbAdd: ((host: String, share: String, user: String, pass: String, domain: String?) -> Unit)? = null
+    var onSmbRemove: ((id: String) -> Unit)? = null
+    var onSmbPlay: ((server: dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer, path: String) -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
     fun acquirePickerSurface(textureId: Int): Surface {
@@ -113,6 +117,11 @@ class PickerSurfaceHost(
         stereoMode.value = mode
     }
 
+    fun setSmbServers(list: List<dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer>) {
+        smbServers.clear()
+        smbServers.addAll(list)
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -163,6 +172,10 @@ class PickerSurfaceHost(
                     },
                     onSnapFront = { onSnapFront?.invoke() },
                     lastPlayedPath = lastPlayed.value,
+                    smbServers = smbServers,
+                    onSmbAdd = { h, sh, u, p, d -> onSmbAdd?.invoke(h, sh, u, p, d) },
+                    onSmbRemove = { id -> onSmbRemove?.invoke(id) },
+                    onSmbPlay = { srv, path -> onSmbPlay?.invoke(srv, path) },
                 )
             }
             measure(

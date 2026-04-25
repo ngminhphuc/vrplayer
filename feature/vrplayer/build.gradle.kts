@@ -89,5 +89,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
 
+    // SMB / NAS browse + stream (Apache 2.0).
+    implementation(libs.smbj)
+    // EncryptedSharedPreferences for SMB credentials.
+    implementation(libs.androidx.security.crypto)
+
     testImplementation(libs.junit4)
 }
