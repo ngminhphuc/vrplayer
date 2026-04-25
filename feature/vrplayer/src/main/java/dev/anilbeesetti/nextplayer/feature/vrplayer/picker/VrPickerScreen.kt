@@ -166,7 +166,10 @@ private fun NetworkTab(
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = {
-                onSubmit(url)
+                // playUrl() (triggered by onPickUrl) already trims the URL,
+                // pushes it into the history store, and refreshes the list.
+                // Calling onSubmit here too would push an untrimmed copy and
+                // create a duplicate entry — see PR #5 review comment.
                 onPickUrl(url)
                 url = ""
             },
