@@ -14,6 +14,8 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionDetector
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProximityAutoPause
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.SleepTimer
 import kotlinx.coroutines.CoroutineScope
@@ -72,6 +74,7 @@ class XrActivity : NativeActivity() {
     }
     private var resumeWriterJob: Job? = null
     private var currentPath: String? = null
+    private var projectionOverride: ProjectionMode? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,6 +111,9 @@ class XrActivity : NativeActivity() {
             sleepTimer.arm(minutes)
             pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         }
+        pickerHost.onProjectionChange = { mode -> setProjectionOverride(mode) }
+        pickerHost.onSnapFront = { snapFront() }
+        pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setUrlHistory(urlStore.list())
         pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         mainScope.launch {
@@ -124,6 +130,7 @@ class XrActivity : NativeActivity() {
         resumeStore.setLastPlayed(trimmed)
         urlStore.push(trimmed)
         pickerHost.setUrlHistory(urlStore.list())
+        applyProjectionFor(trimmed)
         runOnUiThread {
             player?.run {
                 setMediaItem(MediaItem.fromUri(trimmed))
@@ -148,12 +155,17 @@ class XrActivity : NativeActivity() {
             seekTo(resumePos)
             playWhenReady = true
         }
+        // Resume must keep its last projection. Without this, a 360°/180°
+        // file restored from resumeStore would silently fall back to the
+        // cinema cylinder until the user re-picked a file.
+        resumePath?.let { applyProjectionFor(it) }
     }
 
     private fun playEntry(entry: VideoEntry) {
         val resume = resumeStore.load(entry.path)
         currentPath = entry.path
         resumeStore.setLastPlayed(entry.path)
+        applyProjectionFor(entry.path)
         runOnUiThread {
             player?.run {
                 setMediaItem(MediaItem.fromUri(entry.path))
@@ -164,6 +176,30 @@ class XrActivity : NativeActivity() {
         }
         Timber.tag(TAG).i("play: %s @ %d", entry.path, resume)
     }
+
+    /**
+     * Decides between cinema / 360 / 180 for the given source. The user's
+     * manual override (set via [setProjectionOverride]) wins; otherwise
+     * we delegate to [ProjectionDetector].
+     */
+    private fun applyProjectionFor(path: String) {
+        val mode = projectionOverride ?: ProjectionDetector.detect(path)
+        nativeSetProjection(mode.raw)
+        if (mode != ProjectionMode.OFF) nativeSnapFront()
+    }
+
+    fun setProjectionOverride(mode: ProjectionMode?) {
+        projectionOverride = mode
+        currentPath?.let { applyProjectionFor(it) }
+    }
+
+    fun snapFront() {
+        nativeSnapFront()
+    }
+
+    private external fun nativeSetProjection(mode: Int)
+    private external fun nativeSnapFront()
+    private external fun nativeRotateYaw(degrees: Float)
 
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()

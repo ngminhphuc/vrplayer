@@ -29,6 +29,8 @@ add_library(vrplayer SHARED
     quad.cpp
     screen.cpp
     skybox.cpp
+    sphere.cpp
+    native_calls.cpp
     pointer.cpp
     picker_quad.cpp
     input.cpp
