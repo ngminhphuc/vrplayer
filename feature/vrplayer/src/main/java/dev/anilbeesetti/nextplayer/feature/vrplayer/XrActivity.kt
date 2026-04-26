@@ -450,6 +450,11 @@ class XrActivity : NativeActivity() {
     fun setExternalSubtitle(subtitleUri: String?) {
         val key = currentPath ?: return
         subtitleStore.set(key, subtitleUri)
+        // Push fresh state into the picker. Without this the Subtitle tab
+        // would show stale data because resetPerFileState only fires on
+        // file change, not on add/remove of subtitle for the same file.
+        pickerHost.setSubtitleUri(subtitleUri)
+        pickerHost.setSubtitleCue("")
         val pos = player?.currentPosition ?: 0L
         runOnUiThread {
             player?.run {
