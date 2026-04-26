@@ -385,7 +385,12 @@ class XrActivity : NativeActivity() {
         pickerHost.setBookmarks(bookmarkPositions(path))
         // Push the persisted subtitle association into the picker so the
         // Subtitle tab shows whether a sidecar is linked for this file.
-        pickerHost.setSubtitleUri(subtitleStore.get(path))
+        // Fall back to auto-detected sidecar so the user sees confirmation
+        // that the file was picked up automatically.
+        pickerHost.setSubtitleUri(
+            subtitleStore.get(path)?.takeUnless { it.isBlank() }
+                ?: autoScanSidecar(path),
+        )
         pickerHost.setSubtitleCue("")
         subtitleHost.setCue("")
         nativeSetSubtitleVisible(false)
@@ -420,11 +425,22 @@ class XrActivity : NativeActivity() {
 
     /** Build a MediaItem with optional sidecar subtitle from SubtitleStore.
      *  Use this everywhere instead of MediaItem.fromUri so any caller
-     *  benefits from per-file external SRT/VTT side-loading. */
+     *  benefits from per-file external SRT/VTT side-loading.
+     *
+     *  Resolution order:
+     *    1. User's explicit choice from SubtitleStore (set via SAF picker
+     *       in the Subtitle tab).
+     *    2. Auto-detected sidecar in the same directory for local file
+     *       paths — e.g. `/sdcard/Movies/foo.mp4` looks for `foo.srt`,
+     *       `foo.vtt`, `foo.ass`, `foo.ssa`, `foo.ttml`. SAF content
+     *       URIs and SMB URIs skip auto-scan because we don't have
+     *       enumerate-parent access.
+     *    3. No subtitle. */
     private fun buildMediaItem(uri: String): MediaItem {
-        val sub = subtitleStore.get(uri)
-        if (sub.isNullOrBlank()) return MediaItem.fromUri(uri)
-        val subUri = android.net.Uri.parse(sub)
+        val explicit = subtitleStore.get(uri)
+        val subRef = explicit?.takeUnless { it.isBlank() } ?: autoScanSidecar(uri)
+        if (subRef.isNullOrBlank()) return MediaItem.fromUri(uri)
+        val subUri = android.net.Uri.parse(subRef)
         val cfg = MediaItem.SubtitleConfiguration.Builder(subUri)
             .setMimeType(guessSubtitleMime(subUri))
             .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
@@ -433,6 +449,38 @@ class XrActivity : NativeActivity() {
             .setUri(uri)
             .setSubtitleConfigurations(listOf(cfg))
             .build()
+    }
+
+    /** Look for a sidecar subtitle next to a local file. Returns the
+     *  absolute file:// URI of the first match, or null if the input is
+     *  not a local file or no sidecar exists.
+     *
+     *  Only checks local paths because SAF content URIs and SMB shares
+     *  do not give us cheap enumerate-parent access — extending this to
+     *  SAF tree URIs is sprint 4-6 territory. */
+    private fun autoScanSidecar(videoUri: String): String? {
+        val parsed = runCatching { android.net.Uri.parse(videoUri) }.getOrNull()
+        val path = when {
+            parsed?.scheme == null -> videoUri
+            parsed.scheme == "file" -> parsed.path
+            else -> null
+        } ?: return null
+        val file = java.io.File(path)
+        if (!file.isAbsolute) return null
+        val parent = file.parentFile ?: return null
+        if (!parent.canRead()) return null
+        val baseName = file.nameWithoutExtension
+        if (baseName.isBlank()) return null
+        // Order matches the codec-quality preference Media3 has for these
+        // formats — SubRip first since it's the most common sidecar.
+        val candidates = listOf("srt", "vtt", "ass", "ssa", "ttml")
+        for (ext in candidates) {
+            val sidecar = java.io.File(parent, "$baseName.$ext")
+            if (sidecar.exists() && sidecar.canRead()) {
+                return android.net.Uri.fromFile(sidecar).toString()
+            }
+        }
+        return null
     }
 
     /** Resolve the subtitle MIME type by looking up the display name via
