@@ -12,11 +12,13 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.BookmarkStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ABLoop
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionDetector
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
@@ -61,6 +63,8 @@ class XrActivity : NativeActivity() {
     private val resumeStore by lazy { ResumeStore(this) }
     private val urlStore by lazy { UrlHistoryStore(this) }
     private val smbStore by lazy { SmbServerStore(this) }
+    private val bookmarkStore by lazy { BookmarkStore(this) }
+    private val abLoop = ABLoop()
     private val pickerHost by lazy { PickerSurfaceHost(this) }
     private val sleepTimer by lazy {
         SleepTimer {
@@ -151,6 +155,12 @@ class XrActivity : NativeActivity() {
             cleanPath.split('/').filter { it.isNotEmpty() }.forEach { builder.appendPath(it) }
             playUrl(builder.build().toString())
         }
+        pickerHost.onSetLoopA = { setLoopA() }
+        pickerHost.onSetLoopB = { setLoopB() }
+        pickerHost.onClearLoop = { clearLoop() }
+        pickerHost.onAddBookmark = { addBookmark() }
+        pickerHost.onSeekBookmark = { ms -> seekToBookmark(ms) }
+        pickerHost.onRemoveBookmark = { ms -> removeBookmark(ms) }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
         // Restore environment preference and push to native immediately so
@@ -175,6 +185,7 @@ class XrActivity : NativeActivity() {
         resumeStore.setLastPlayed(trimmed)
         urlStore.push(trimmed)
         pickerHost.setUrlHistory(urlStore.list())
+        resetPerFileState(trimmed)
         applyProjectionFor(trimmed)
         runOnUiThread {
             player?.run {
@@ -210,6 +221,7 @@ class XrActivity : NativeActivity() {
         val resume = resumeStore.load(entry.path)
         currentPath = entry.path
         resumeStore.setLastPlayed(entry.path)
+        resetPerFileState(entry.path)
         applyProjectionFor(entry.path)
         runOnUiThread {
             player?.run {
@@ -269,13 +281,69 @@ class XrActivity : NativeActivity() {
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()
         resumeWriterJob = mainScope.launch {
+            // 5s for resume save (low frequency, ok if we miss the last
+            // half-second). 250 ms tick for A-B loop watcher so the seek
+            // back is responsive without spinning the CPU.
+            var sinceLastSave = 0L
             while (isActive) {
-                delay(5_000L)
+                delay(250L)
+                sinceLastSave += 250L
                 val p = currentPath ?: continue
                 val pos = player?.currentPosition ?: continue
-                resumeStore.save(p, pos)
+                abLoop.seekTargetIfPastB(pos)?.let { target ->
+                    player?.seekTo(target)
+                }
+                if (sinceLastSave >= 5_000L) {
+                    resumeStore.save(p, pos)
+                    sinceLastSave = 0L
+                }
             }
         }
+    }
+
+    fun setLoopA() {
+        val pos = player?.currentPosition ?: return
+        abLoop.setA(pos)
+        pickerHost.setAbLoop(abLoop.pointA, abLoop.pointB)
+    }
+
+    fun setLoopB() {
+        val pos = player?.currentPosition ?: return
+        abLoop.setB(pos)
+        pickerHost.setAbLoop(abLoop.pointA, abLoop.pointB)
+    }
+
+    fun clearLoop() {
+        abLoop.clear()
+        pickerHost.setAbLoop(-1L, -1L)
+    }
+
+    fun addBookmark() {
+        val key = currentPath ?: return
+        val pos = player?.currentPosition ?: return
+        bookmarkStore.add(key, pos)
+        pickerHost.setBookmarks(bookmarkPositions(key))
+    }
+
+    fun removeBookmark(positionMs: Long) {
+        val key = currentPath ?: return
+        bookmarkStore.remove(key, positionMs)
+        pickerHost.setBookmarks(bookmarkPositions(key))
+    }
+
+    fun seekToBookmark(positionMs: Long) {
+        player?.seekTo(positionMs)
+    }
+
+    private fun bookmarkPositions(key: String): List<Long> =
+        bookmarkStore.list(key).map { it.positionMs }
+
+    /** Reset session-only A-B loop, then refresh persisted bookmarks for
+     *  the new path so the picker shows the right list immediately. */
+    private fun resetPerFileState(path: String) {
+        abLoop.clear()
+        pickerHost.setAbLoop(-1L, -1L)
+        pickerHost.setBookmarks(bookmarkPositions(path))
     }
 
     override fun onDestroy() {
