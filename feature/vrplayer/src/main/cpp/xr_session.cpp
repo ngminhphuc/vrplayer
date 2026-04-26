@@ -26,6 +26,7 @@ XrSession::~XrSession() {
             xrDestroySwapchain(sc.handle);
         }
     }
+    mHands.shutdown();
     if (mAppSpace != XR_NULL_HANDLE) xrDestroySpace(mAppSpace);
     if (mSession != XR_NULL_HANDLE) xrDestroySession(mSession);
     if (mInstance != XR_NULL_HANDLE) xrDestroyInstance(mInstance);
@@ -45,6 +46,9 @@ bool XrSession::init(android_app* androidApp, EGLDisplay display,
     } else {
         VRP_LOGE("Input init failed; controllers will not work");
     }
+    // Best-effort: hand tracking is optional. Failure leaves mHands
+    // in a disabled state — controller input continues to work.
+    mHands.init(mInstance, mSession);
     Screen::setTransform(mScreen.radius, mScreen.arc, mScreen.height,
                          mScreen.yaw, 0.f, mScreen.yOffset, mScreen.zOffset);
     VRP_LOGI("XrSession initialised; %zu views", mViewConfigViews.size());
@@ -96,6 +100,11 @@ bool XrSession::createInstance(android_app* androidApp) {
         extensions.push_back("XR_FB_swapchain_update_state");
     if (hasExt("XR_FB_display_refresh_rate"))
         extensions.push_back("XR_FB_display_refresh_rate");
+    // XR_EXT_hand_tracking — best-effort. We always still take controller
+    // input; hand tracking is purely additive (pinch generates the same
+    // edges as a controller trigger when no controller is held).
+    if (hasExt(XR_EXT_HAND_TRACKING_EXTENSION_NAME))
+        extensions.push_back(XR_EXT_HAND_TRACKING_EXTENSION_NAME);
 
     XrInstanceCreateInfoAndroidKHR androidCreate{
         XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
@@ -247,6 +256,26 @@ void XrSession::applyScreenTransform(float radius, float arc, float height,
 void XrSession::processInput(XrTime predictedTime) {
     if (!mInputAttached) return;
     mInput.sync(mSession, mAppSpace, predictedTime);
+    mHands.update(mAppSpace, predictedTime);
+
+    // Hand pinch acts as additive trigger edges. We only override the
+    // controller aim with hand aim if no controller orientation is
+    // currently valid (i.e. user has put down the controllers and is
+    // gesturing with bare hands). Pinch-edge consumes the latch so it
+    // fires once per pinch.
+    bool handPinchL = mHands.consumeLeftPinchEdge();
+    bool handPinchR = mHands.consumeRightPinchEdge();
+    XrPosef handAimL{}, handAimR{};
+    bool handAimLValid = mHands.leftAimPose(&handAimL);
+    bool handAimRValid = mHands.rightAimPose(&handAimR);
+    if (handPinchL) {
+        mInput.triggerLeftEdge = true;
+        mInput.triggerPressedEdge = true;
+    }
+    if (handPinchR) {
+        mInput.triggerRightEdge = true;
+        mInput.triggerPressedEdge = true;
+    }
 
     // When the picker is open, trigger acts as "click on hovered item".
     // Otherwise it's the global play/pause shortcut.
@@ -257,18 +286,32 @@ void XrSession::processInput(XrTime predictedTime) {
             // If both fire in the same frame, prefer right; if neither
             // (shouldn't happen because triggerPressedEdge implies at
             // least one), fall back to whichever has valid orientation.
-            const XrSpaceLocation* aim = nullptr;
-            if (mInput.triggerRightEdge) {
-                aim = &mInput.rightAim;
+            // Pick aim source: prefer hand aim if a hand pinched this
+            // frame, else fall back to controller aim.
+            XrPosef aimPose{};
+            bool aimValid = false;
+            if (handPinchR && handAimRValid) {
+                aimPose = handAimR;
+                aimValid = true;
+            } else if (handPinchL && handAimLValid) {
+                aimPose = handAimL;
+                aimValid = true;
+            } else if (mInput.triggerRightEdge) {
+                aimPose = mInput.rightAim.pose;
+                aimValid = true;
             } else if (mInput.triggerLeftEdge) {
-                aim = &mInput.leftAim;
+                aimPose = mInput.leftAim.pose;
+                aimValid = true;
             } else if (mInput.rightAim.locationFlags &
                        XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) {
-                aim = &mInput.rightAim;
+                aimPose = mInput.rightAim.pose;
+                aimValid = true;
             } else {
-                aim = &mInput.leftAim;
+                aimPose = mInput.leftAim.pose;
+                aimValid = (mInput.leftAim.locationFlags &
+                            XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0;
             }
-            if (PickerQuad::hitTest(aim->pose, &u, &v)) {
+            if (aimValid && PickerQuad::hitTest(aimPose, &u, &v)) {
                 VideoBridge::injectPickerTap(u, v);
                 PickerQuad::setVisible(false);
             }

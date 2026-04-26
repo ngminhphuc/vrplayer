@@ -1,4 +1,5 @@
 #include "log.h"
+#include "skybox.h"
 #include "sphere.h"
 #include "stereo.h"
 
@@ -51,6 +52,21 @@ Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetStereo(
     }
     vrplayer::Stereo::setMode(m);
     VRP_LOGI("Stereo mode -> %d", mode);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetEnvironment(
+    JNIEnv*, jobject, jint mode) {
+    using M = vrplayer::Skybox::Mode;
+    M m = M::BlackVoid;
+    switch (mode) {
+        case 1: m = M::ModernCinema; break;
+        case 2: m = M::DriveIn; break;
+        case 3: m = M::Space; break;
+        default: m = M::BlackVoid; break;
+    }
+    vrplayer::Skybox::setMode(m);
+    VRP_LOGI("Environment mode -> %d", mode);
 }
 
 }  // extern "C"

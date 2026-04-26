@@ -17,6 +17,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionDetector
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProximityAutoPause
@@ -84,6 +85,8 @@ class XrActivity : NativeActivity() {
     private var currentPath: String? = null
     private var projectionOverride: ProjectionMode? = null
     private var stereoOverride: StereoMode? = null
+    private val envPrefs by lazy { getSharedPreferences("vrplayer_env", MODE_PRIVATE) }
+    private var environmentMode: EnvironmentMode = EnvironmentMode.BlackVoid
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -123,6 +126,7 @@ class XrActivity : NativeActivity() {
         pickerHost.onProjectionChange = { mode -> setProjectionOverride(mode) }
         pickerHost.onStereoChange = { mode -> setStereoOverride(mode) }
         pickerHost.onSnapFront = { snapFront() }
+        pickerHost.onEnvironmentChange = { mode -> setEnvironment(mode) }
         pickerHost.onSmbAdd = { host, share, user, pass, domain ->
             smbStore.add(
                 SmbServer(id = "", host = host, share = share, username = user, domain = domain),
@@ -149,6 +153,11 @@ class XrActivity : NativeActivity() {
         }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
+        // Restore environment preference and push to native immediately so
+        // first frame after launch is in the user's chosen ambience.
+        environmentMode = EnvironmentMode.fromRaw(envPrefs.getInt(KEY_ENV, 0))
+        nativeSetEnvironment(environmentMode.raw)
+        pickerHost.setEnvironmentMode(environmentMode)
         pickerHost.setUrlHistory(urlStore.list())
         pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         pickerHost.setSmbServers(smbStore.list())
@@ -244,10 +253,18 @@ class XrActivity : NativeActivity() {
         nativeSnapFront()
     }
 
+    fun setEnvironment(mode: EnvironmentMode) {
+        environmentMode = mode
+        nativeSetEnvironment(mode.raw)
+        envPrefs.edit().putInt(KEY_ENV, mode.raw).apply()
+        pickerHost.setEnvironmentMode(mode)
+    }
+
     private external fun nativeSetProjection(mode: Int)
     private external fun nativeSnapFront()
     private external fun nativeRotateYaw(degrees: Float)
     private external fun nativeSetStereo(mode: Int)
+    private external fun nativeSetEnvironment(mode: Int)
 
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()
@@ -474,6 +491,7 @@ class XrActivity : NativeActivity() {
         private const val KEY_YAW = "yaw"
         private const val KEY_Y_OFFSET = "y_off"
         private const val KEY_Z_OFFSET = "z_off"
+        private const val KEY_ENV = "env_mode"
 
         init {
             // Loaded by NativeActivity via android.app.lib_name meta-data, but

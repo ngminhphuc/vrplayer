@@ -45,6 +45,8 @@ class PickerSurfaceHost(
     private val stereoMode =
         mutableStateOf<dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?>(null)
     private val smbServers = mutableListOf<dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer>().toMutableStateList()
+    private val environmentMode =
+        mutableStateOf(dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode.BlackVoid)
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -53,6 +55,7 @@ class PickerSurfaceHost(
     var onProjectionChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode?) -> Unit)? = null
     var onStereoChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode?) -> Unit)? = null
     var onSnapFront: (() -> Unit)? = null
+    var onEnvironmentChange: ((dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode) -> Unit)? = null
     var onSmbAdd: ((host: String, share: String, user: String, pass: String, domain: String?) -> Unit)? = null
     var onSmbRemove: ((id: String) -> Unit)? = null
     var onSmbPlay: ((server: dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer, path: String) -> Unit)? = null
@@ -122,6 +125,10 @@ class PickerSurfaceHost(
         smbServers.addAll(list)
     }
 
+    fun setEnvironmentMode(mode: dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode) {
+        environmentMode.value = mode
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -176,6 +183,11 @@ class PickerSurfaceHost(
                     onSmbAdd = { h, sh, u, p, d -> onSmbAdd?.invoke(h, sh, u, p, d) },
                     onSmbRemove = { id -> onSmbRemove?.invoke(id) },
                     onSmbPlay = { srv, path -> onSmbPlay?.invoke(srv, path) },
+                    environmentMode = environmentMode.value,
+                    onEnvironmentChange = { m ->
+                        environmentMode.value = m
+                        onEnvironmentChange?.invoke(m)
+                    },
                 )
             }
             measure(
