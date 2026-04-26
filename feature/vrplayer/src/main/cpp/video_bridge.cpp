@@ -12,6 +12,10 @@ jobject VideoBridge::sActivityRef = nullptr;
 jmethodID VideoBridge::sAcquireSurface = nullptr;
 jmethodID VideoBridge::sUpdateTexImage = nullptr;
 jmethodID VideoBridge::sGetTransformMatrix = nullptr;
+jmethodID VideoBridge::sTogglePlayPause = nullptr;
+jmethodID VideoBridge::sSeekDelta = nullptr;
+jmethodID VideoBridge::sVolumeDelta = nullptr;
+jmethodID VideoBridge::sPersistTransform = nullptr;
 uint32_t VideoBridge::sTextureId = 0;
 
 namespace {
@@ -45,10 +49,15 @@ void VideoBridge::attach(JNIEnv* env, jobject xrActivity) {
         env->GetMethodID(cls, "acquireVideoSurface", "(I)Landroid/view/Surface;");
     sUpdateTexImage = env->GetMethodID(cls, "updateTexImage", "()V");
     sGetTransformMatrix = env->GetMethodID(cls, "getTransformMatrix", "([F)V");
+    sTogglePlayPause = env->GetMethodID(cls, "togglePlayPause", "()V");
+    sSeekDelta = env->GetMethodID(cls, "seekDelta", "(I)V");
+    sVolumeDelta = env->GetMethodID(cls, "volumeDelta", "(F)V");
+    sPersistTransform =
+        env->GetMethodID(cls, "persistScreenTransform", "(FFFFFF)V");
     env->DeleteLocalRef(cls);
 
     if (!sAcquireSurface || !sUpdateTexImage || !sGetTransformMatrix) {
-        VRP_LOGE("VideoBridge::attach failed to resolve methods");
+        VRP_LOGE("VideoBridge::attach failed to resolve core methods");
     }
 }
 
@@ -109,6 +118,57 @@ void VideoBridge::getTransformMatrix(float out[16]) {
     }
     env->DeleteLocalRef(arr);
     detachEnv(needDetach);
+}
+
+namespace {
+
+template <typename Call>
+void callVoid(jmethodID method, Call invoke) {
+    if (!VideoBridge::textureId() && false) return;  // suppress unused warn
+    if (!method) return;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    invoke(env, method);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    detachEnv(need);
+}
+
+}  // namespace
+
+void VideoBridge::togglePlayPause() {
+    if (!sActivityRef || !sTogglePlayPause) return;
+    callVoid(sTogglePlayPause, [](JNIEnv* env, jmethodID m) {
+        env->CallVoidMethod(sActivityRef, m);
+    });
+}
+
+void VideoBridge::seekDelta(int deltaMs) {
+    if (!sActivityRef || !sSeekDelta) return;
+    callVoid(sSeekDelta, [deltaMs](JNIEnv* env, jmethodID m) {
+        env->CallVoidMethod(sActivityRef, m, static_cast<jint>(deltaMs));
+    });
+}
+
+void VideoBridge::volumeDelta(float delta) {
+    if (!sActivityRef || !sVolumeDelta) return;
+    callVoid(sVolumeDelta, [delta](JNIEnv* env, jmethodID m) {
+        env->CallVoidMethod(sActivityRef, m, static_cast<jfloat>(delta));
+    });
+}
+
+void VideoBridge::persistScreenTransform(float radius, float arc, float height,
+                                          float yaw, float yOffset,
+                                          float zOffset) {
+    if (!sActivityRef || !sPersistTransform) return;
+    callVoid(sPersistTransform,
+             [=](JNIEnv* env, jmethodID m) {
+                 env->CallVoidMethod(sActivityRef, m, radius, arc, height,
+                                     yaw, yOffset, zOffset);
+             });
 }
 
 }  // namespace vrplayer

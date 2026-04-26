@@ -27,6 +27,10 @@ add_library(vrplayer SHARED
     xr_session.cpp
     gl_renderer.cpp
     quad.cpp
+    screen.cpp
+    skybox.cpp
+    pointer.cpp
+    input.cpp
     video_bridge.cpp
 )
 

@@ -24,11 +24,22 @@ public:
     static void updateTexImage();
     static void getTransformMatrix(float out[16]);
 
+    // Player command bridge (ExoPlayer lives in Kotlin land).
+    static void togglePlayPause();
+    static void seekDelta(int deltaMs);
+    static void volumeDelta(float delta);
+    static void persistScreenTransform(float radius, float arc, float height,
+                                       float yaw, float yOffset, float zOffset);
+
 private:
-    static jobject sActivityRef;          // global ref to XrActivity
-    static jmethodID sAcquireSurface;     // (I)Landroid/view/Surface;
-    static jmethodID sUpdateTexImage;     // ()V
-    static jmethodID sGetTransformMatrix; // ([F)V
+    static jobject sActivityRef;
+    static jmethodID sAcquireSurface;
+    static jmethodID sUpdateTexImage;
+    static jmethodID sGetTransformMatrix;
+    static jmethodID sTogglePlayPause;
+    static jmethodID sSeekDelta;
+    static jmethodID sVolumeDelta;
+    static jmethodID sPersistTransform;
     static uint32_t sTextureId;
 };
 
