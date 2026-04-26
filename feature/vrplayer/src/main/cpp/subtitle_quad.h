@@ -22,6 +22,11 @@ public:
     static void setVisible(bool visible);
     static bool visible();
 
+    /** User-controlled vertical offset in meters. Added to the quad's
+     *  default Y position so people with large fonts can push the
+     *  subtitle further down out of the cinema screen. */
+    static void setVerticalOffset(float offsetMeters);
+
     /** Render with the subtitle's external OES texture id + transform. */
     static void draw(uint32_t externalOesTexId, const float* proj,
                      const float* view, const float* texMatrix);

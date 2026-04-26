@@ -82,8 +82,12 @@ fun VrPickerScreen(
     playerStatus: PlayerStatus = PlayerStatus.Idle,
     subtitleUri: String? = null,
     subtitleCue: String = "",
+    subtitleFontSize: Int = SubtitlePrefsStore.DEFAULT_FONT_SIZE,
+    subtitleVerticalOffset: Float = 0f,
     onPickSubtitle: () -> Unit = {},
     onClearSubtitle: () -> Unit = {},
+    onSubtitleFontSizeChange: (Int) -> Unit = {},
+    onSubtitleVerticalOffsetChange: (Float) -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -117,8 +121,12 @@ fun VrPickerScreen(
                     PickerTab.Subtitle -> SubtitleTab(
                         subtitleUri,
                         subtitleCue,
+                        subtitleFontSize,
+                        subtitleVerticalOffset,
                         onPickSubtitle,
                         onClearSubtitle,
+                        onSubtitleFontSizeChange,
+                        onSubtitleVerticalOffsetChange,
                     )
                     PickerTab.About -> AboutTab()
                     PickerTab.Settings -> SettingsTab(
@@ -278,8 +286,12 @@ private fun NetworkTab(
 private fun SubtitleTab(
     subtitleUri: String?,
     subtitleCue: String,
+    subtitleFontSize: Int,
+    subtitleVerticalOffset: Float,
     onPickSubtitle: () -> Unit,
     onClearSubtitle: () -> Unit,
+    onSubtitleFontSizeChange: (Int) -> Unit,
+    onSubtitleVerticalOffsetChange: (Float) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Phụ đề", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
@@ -301,13 +313,36 @@ private fun SubtitleTab(
             TabChip(label = "Chọn file", selected = false, onClick = onPickSubtitle)
             TabChip(label = "Bỏ phụ đề", selected = false, onClick = onClearSubtitle)
         }
+        Spacer(Modifier.height(8.dp))
+        Text("Cỡ chữ", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(24, 32, 40, 48).forEach { sp ->
+                TabChip(
+                    label = "${sp}sp",
+                    selected = subtitleFontSize == sp,
+                    onClick = { onSubtitleFontSizeChange(sp) },
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Vị trí dọc (m)",
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Negative = lower in the world (further from eye level), positive = higher.
+            listOf(-0.5f, -0.25f, 0f, 0.25f).forEach { off ->
+                TabChip(
+                    label = if (off == 0f) "Mặc định" else "%.2f".format(off),
+                    selected = kotlin.math.abs(subtitleVerticalOffset - off) < 0.01f,
+                    onClick = { onSubtitleVerticalOffsetChange(off) },
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Text("Cue hiện tại", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
-        Text(
-            "Đoạn phụ đề ExoPlayer đang hiển thị. Đây là preview — phiên bản render head-locked sẽ vào sprint sau.",
-            color = Color(0xFF9AA3B0),
-            fontSize = 14.sp,
-        )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = Color(0xFF0A0E14),

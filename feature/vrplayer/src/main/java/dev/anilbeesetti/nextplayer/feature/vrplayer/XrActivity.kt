@@ -17,6 +17,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PlayerStatus
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitlePrefsStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitleStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitleSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
@@ -68,6 +69,7 @@ class XrActivity : NativeActivity() {
     private val smbStore by lazy { SmbServerStore(this) }
     private val bookmarkStore by lazy { BookmarkStore(this) }
     private val subtitleStore by lazy { SubtitleStore(this) }
+    private val subtitlePrefs by lazy { SubtitlePrefsStore(this) }
     private var currentCue = ""
     private val abLoop = ABLoop()
     private val pickerHost by lazy { PickerSurfaceHost(this) }
@@ -169,6 +171,24 @@ class XrActivity : NativeActivity() {
         pickerHost.onRemoveBookmark = { ms -> removeBookmark(ms) }
         pickerHost.onPickSubtitle = { launchSubtitlePicker() }
         pickerHost.onClearSubtitle = { setExternalSubtitle(null) }
+        // Restore subtitle styling preferences. Push the saved values into
+        // (a) the picker tab so the chips render as selected, (b) the
+        // SubtitleSurfaceHost so the Compose Text uses the right size,
+        // (c) the native quad so the world-space Y offset is applied.
+        val savedFontSize = subtitlePrefs.fontSizeSp()
+        val savedOffset = subtitlePrefs.verticalOffset()
+        pickerHost.setSubtitleFontSize(savedFontSize)
+        pickerHost.setSubtitleVerticalOffset(savedOffset)
+        subtitleHost.setFontSize(savedFontSize)
+        nativeSetSubtitleVerticalOffset(savedOffset)
+        pickerHost.onSubtitleFontSizeChange = { sp ->
+            subtitlePrefs.setFontSizeSp(sp)
+            subtitleHost.setFontSize(sp)
+        }
+        pickerHost.onSubtitleVerticalOffsetChange = { off ->
+            subtitlePrefs.setVerticalOffset(off)
+            nativeSetSubtitleVerticalOffset(off)
+        }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
         // Restore environment preference and push to native immediately so
@@ -291,6 +311,7 @@ class XrActivity : NativeActivity() {
     private external fun nativeSetStereo(mode: Int)
     private external fun nativeSetEnvironment(mode: Int)
     private external fun nativeSetSubtitleVisible(visible: Boolean)
+    private external fun nativeSetSubtitleVerticalOffset(meters: Float)
 
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()

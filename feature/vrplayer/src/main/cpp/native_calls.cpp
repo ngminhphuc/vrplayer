@@ -82,4 +82,10 @@ Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetSubtitleVi
     vrplayer::SubtitleQuad::setVisible(visible == JNI_TRUE);
 }
 
+JNIEXPORT void JNICALL
+Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetSubtitleVerticalOffset(
+    JNIEnv*, jobject, jfloat meters) {
+    vrplayer::SubtitleQuad::setVerticalOffset(meters);
+}
+
 }  // extern "C"
