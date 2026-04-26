@@ -397,22 +397,43 @@ class XrActivity : NativeActivity() {
     private fun buildMediaItem(uri: String): MediaItem {
         val sub = subtitleStore.get(uri)
         if (sub.isNullOrBlank()) return MediaItem.fromUri(uri)
-        val ext = sub.substringAfterLast('.', "").lowercase()
-        val mime = when (ext) {
-            "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
-            "srt", "subrip" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
-            "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
-            "ttml", "xml", "dfxp" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
-            else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
-        }
-        val cfg = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(sub))
-            .setMimeType(mime)
+        val subUri = android.net.Uri.parse(sub)
+        val cfg = MediaItem.SubtitleConfiguration.Builder(subUri)
+            .setMimeType(guessSubtitleMime(subUri))
             .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
             .build()
         return MediaItem.Builder()
             .setUri(uri)
             .setSubtitleConfigurations(listOf(cfg))
             .build()
+    }
+
+    /** Resolve the subtitle MIME type by looking up the display name via
+     *  the ContentResolver. Naively splitting on the last `.` of a SAF
+     *  content URI can match dots inside the authority (e.g.
+     *  `com.android.providers.downloads.documents`) instead of the file
+     *  extension, which would silently fall through to SubRip and
+     *  garble VTT/ASS/TTML content. */
+    private fun guessSubtitleMime(contentUri: android.net.Uri): String {
+        val displayName = runCatching {
+            contentResolver.query(
+                contentUri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()
+        val ext = (displayName ?: contentUri.toString())
+            .substringAfterLast('.', "")
+            .lowercase()
+        return when (ext) {
+            "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
+            "srt", "subrip" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+            "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
+            "ttml", "xml", "dfxp" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
+            else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+        }
     }
 
     /** Open Storage Access Framework picker so the user can browse for an
