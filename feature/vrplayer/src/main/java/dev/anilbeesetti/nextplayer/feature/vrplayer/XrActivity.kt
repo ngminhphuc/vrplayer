@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.BookmarkStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PlayerStatus
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
@@ -398,6 +399,26 @@ class XrActivity : NativeActivity() {
         val exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
             .build()
+        // Surface playback state and errors to the picker so the user
+        // sees a buffering spinner / readable error message instead of
+        // a silently-paused black quad. We keep this listener tiny and
+        // delegate the heavy work to PlayerStatus mapping.
+        exo.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                pickerHost.setPlayerStatus(
+                    when (state) {
+                        androidx.media3.common.Player.STATE_BUFFERING -> PlayerStatus.Buffering
+                        androidx.media3.common.Player.STATE_READY -> PlayerStatus.Playing
+                        androidx.media3.common.Player.STATE_ENDED -> PlayerStatus.Ended
+                        else -> PlayerStatus.Idle
+                    },
+                )
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                pickerHost.setPlayerStatus(PlayerStatus.Error(error.errorCodeName + ": " + (error.message ?: "")))
+            }
+        })
         player = exo
     }
 
