@@ -158,13 +158,21 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
 
     // 3b. Subtitle quad (alpha-blended) below the cinema screen.
     //     Visible only while the current cue is non-empty; visibility
-    //     is toggled from Kotlin via setSubtitleVisible().
-    if (SubtitleQuad::visible() && VideoBridge::subtitleTextureId() != 0) {
-        VideoBridge::updateSubtitleTexImage();
-        float subTexMat[16];
-        VideoBridge::getSubtitleTransformMatrix(subTexMat);
-        SubtitleQuad::draw(VideoBridge::subtitleTextureId(), proj, viewMat,
-                           subTexMat);
+    //     is toggled from Kotlin via nativeSetSubtitleVisible(). Lazily
+    //     create the OES texture + Surface here on the render thread,
+    //     where the GL context is current — calling this from the JNI
+    //     thread would silently no-op glGenTextures.
+    if (SubtitleQuad::visible()) {
+        if (VideoBridge::subtitleTextureId() == 0) {
+            VideoBridge::requestSubtitleSurface();
+        }
+        if (VideoBridge::subtitleTextureId() != 0) {
+            VideoBridge::updateSubtitleTexImage();
+            float subTexMat[16];
+            VideoBridge::getSubtitleTransformMatrix(subTexMat);
+            SubtitleQuad::draw(VideoBridge::subtitleTextureId(), proj, viewMat,
+                               subTexMat);
+        }
     }
 
     // 4. Laser pointers from active controllers.

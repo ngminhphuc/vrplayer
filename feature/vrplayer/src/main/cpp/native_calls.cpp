@@ -74,14 +74,12 @@ Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetEnvironmen
 JNIEXPORT void JNICALL
 Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetSubtitleVisible(
     JNIEnv*, jobject, jboolean visible) {
-    // First-time make-visible needs to ensure the GL texture + Surface
-    // exist on the render thread side; mirror what the picker does
-    // when the user opens the menu for the first time.
-    bool v = (visible == JNI_TRUE);
-    vrplayer::SubtitleQuad::setVisible(v);
-    if (v && vrplayer::VideoBridge::subtitleTextureId() == 0) {
-        vrplayer::VideoBridge::requestSubtitleSurface();
-    }
+    // Just flip the visibility flag; the render thread (which owns the
+    // GL context) handles the lazy texture/Surface creation in
+    // GlRenderer::renderEye. Calling requestSubtitleSurface() here from
+    // the JNI/main thread would trigger glGenTextures with no current
+    // GL context and silently leave sSubtitleTexId == 0 forever.
+    vrplayer::SubtitleQuad::setVisible(visible == JNI_TRUE);
 }
 
 }  // extern "C"

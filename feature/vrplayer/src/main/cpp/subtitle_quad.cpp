@@ -131,10 +131,12 @@ void SubtitleQuad::draw(uint32_t externalOesTexId, const float* proj,
     }
     // Alpha-blend so the transparent regions of the Compose surface
     // (everything outside the cue text) reveal the cinema screen
-    // behind the quad. Straight (non-premultiplied) blend matches
-    // Android Surface alpha semantics.
+    // behind the quad. Surface.lockCanvas produces premultiplied alpha
+    // content, so we use (GL_ONE, GL_ONE_MINUS_SRC_ALPHA) — anything
+    // else double-multiplies alpha on anti-aliased text edges and
+    // produces visible dark halos around the cue glyphs.
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, externalOesTexId);
