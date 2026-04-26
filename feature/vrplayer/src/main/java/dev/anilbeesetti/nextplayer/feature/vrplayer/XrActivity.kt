@@ -455,13 +455,18 @@ class XrActivity : NativeActivity() {
         // file change, not on add/remove of subtitle for the same file.
         pickerHost.setSubtitleUri(subtitleUri)
         pickerHost.setSubtitleCue("")
+        // Preserve the user's pause/play intent. setExternalSubtitle is a
+        // mid-playback swap of the same file, not a fresh start, so forcing
+        // playWhenReady=true would resume a paused video the moment the
+        // user picks or clears a sidecar.
+        val wasPlaying = player?.playWhenReady ?: true
         val pos = player?.currentPosition ?: 0L
         runOnUiThread {
             player?.run {
                 setMediaItem(buildMediaItem(key))
                 prepare()
                 seekTo(pos)
-                playWhenReady = true
+                playWhenReady = wasPlaying
             }
         }
     }
