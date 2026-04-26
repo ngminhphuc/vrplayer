@@ -50,6 +50,7 @@ class PickerSurfaceHost(
     private val abPointA = mutableStateOf(-1L)
     private val abPointB = mutableStateOf(-1L)
     private val bookmarks: SnapshotStateList<Long> = mutableListOf<Long>().toMutableStateList()
+    private val playerStatus = mutableStateOf<PlayerStatus>(PlayerStatus.Idle)
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -148,6 +149,10 @@ class PickerSurfaceHost(
         bookmarks.addAll(list)
     }
 
+    fun setPlayerStatus(status: PlayerStatus) {
+        playerStatus.value = status
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -216,6 +221,7 @@ class PickerSurfaceHost(
                     onAddBookmark = { onAddBookmark?.invoke() },
                     onSeekBookmark = { ms -> onSeekBookmark?.invoke(ms) },
                     onRemoveBookmark = { ms -> onRemoveBookmark?.invoke(ms) },
+                    playerStatus = playerStatus.value,
                 )
             }
             measure(

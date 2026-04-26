@@ -41,7 +41,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
 
-private enum class PickerTab { Local, Network, Smb, Playback, Settings }
+private enum class PickerTab { Local, Network, Smb, Playback, Settings, About }
 
 /**
  * World-space picker UI — designed to render into a 1.2 m × 0.8 m quad in
@@ -79,6 +79,7 @@ fun VrPickerScreen(
     onAddBookmark: () -> Unit = {},
     onSeekBookmark: (Long) -> Unit = {},
     onRemoveBookmark: (Long) -> Unit = {},
+    playerStatus: PlayerStatus = PlayerStatus.Idle,
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -92,6 +93,7 @@ fun VrPickerScreen(
                     .padding(24.dp),
             ) {
                 Header(entries.size, tab) { tab = it }
+                StatusBanner(playerStatus)
                 Spacer(Modifier.height(16.dp))
                 when (tab) {
                     PickerTab.Local -> LocalTab(entries, lastPlayedPath, onPick)
@@ -108,6 +110,7 @@ fun VrPickerScreen(
                         onSeekBookmark,
                         onRemoveBookmark,
                     )
+                    PickerTab.About -> AboutTab()
                     PickerTab.Settings -> SettingsTab(
                         sleepTimerMinutes,
                         onSleepTimerArm,
@@ -258,6 +261,72 @@ private fun NetworkTab(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatusBanner(status: PlayerStatus) {
+    val (text, color) = when (status) {
+        is PlayerStatus.Idle -> return
+        is PlayerStatus.Playing -> return
+        is PlayerStatus.Buffering -> "Đang tải..." to Color(0xFF6BB1FF)
+        is PlayerStatus.Ended -> "Đã hết file" to Color(0xFF9AA3B0)
+        is PlayerStatus.Error -> "Lỗi: ${status.message}" to Color(0xFFFF6B6B)
+    }
+    Spacer(Modifier.height(8.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFF161A22),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontSize = 16.sp,
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}
+
+@Composable
+private fun AboutTab() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("VR Player", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Trình xem video VR mã nguồn mở dành cho Meta Quest. Native Kotlin + OpenXR + Media3 (ExoPlayer).",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("Tín dụng", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Dự án này là fork phái sinh của NextPlayer (anilbeesetti/nextplayer), giấy phép GNU GPLv3.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Text(
+            "Theo điều kiện GPLv3, mã nguồn của VR Player được mở tại github.com/ngminhphuc/vrplayer cùng với toàn bộ thay đổi so với upstream.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("Thư viện chính", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "• Khronos OpenXR Loader 1.0.34 (Apache 2.0)\n" +
+                "• AndroidX Media3 / ExoPlayer (Apache 2.0)\n" +
+                "• smbj 0.14.0 (Apache 2.0)\n" +
+                "• AndroidX Security Crypto (Apache 2.0)\n" +
+                "• Jetpack Compose / Material 3 (Apache 2.0)\n" +
+                "• Timber (Apache 2.0)",
+            color = Color(0xFF9AA3B0),
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Toàn bộ giấy phép Apache 2.0 / GPLv3 lưu trong file LICENSE và NOTICE đi kèm APK.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 13.sp,
+        )
     }
 }
 
