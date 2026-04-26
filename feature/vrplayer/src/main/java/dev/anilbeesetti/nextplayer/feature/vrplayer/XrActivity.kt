@@ -5,13 +5,17 @@ import android.content.Context
 import android.graphics.SurfaceTexture
 import android.media.AudioManager
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.Surface
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProximityAutoPause
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.SleepTimer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,7 +49,27 @@ class XrActivity : NativeActivity() {
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val resumeStore by lazy { ResumeStore(this) }
+    private val urlStore by lazy { UrlHistoryStore(this) }
     private val pickerHost by lazy { PickerSurfaceHost(this) }
+    private val sleepTimer by lazy {
+        SleepTimer {
+            player?.playWhenReady = false
+            pickerHost.setSleepMinutes(0)
+            // Sleep timer pause is intentional. If proximity later sees a
+            // remount it must NOT auto-resume — clear our "we paused it"
+            // flag so the player stays paused until the user re-arms or
+            // hits play.
+            proximity.clearPausedFlag()
+        }
+    }
+    private val proximity by lazy {
+        ProximityAutoPause(
+            context = this,
+            isPlaying = { player?.playWhenReady == true },
+            pausePlayer = { player?.playWhenReady = false },
+            resumePlayer = { player?.playWhenReady = true },
+        )
+    }
     private var resumeWriterJob: Job? = null
     private var currentPath: String? = null
 
@@ -63,15 +87,52 @@ class XrActivity : NativeActivity() {
         configurePicker()
         loadInitialMedia()
         startResumeWriter()
+        proximity.start()
+    }
+
+    override fun onPause() {
+        proximity.stop()
+        player?.playWhenReady = false
+        currentPath?.let { resumeStore.save(it, player?.currentPosition ?: 0L) }
+        super.onPause()
     }
 
     private fun configurePicker() {
         pickerHost.onPick = { entry -> playEntry(entry) }
+        pickerHost.onPickUrl = { url -> playUrl(url) }
+        pickerHost.onUrlSubmit = { url ->
+            urlStore.push(url)
+            pickerHost.setUrlHistory(urlStore.list())
+        }
+        pickerHost.onSleepTimerArm = { minutes ->
+            sleepTimer.arm(minutes)
+            pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
+        }
+        pickerHost.setUrlHistory(urlStore.list())
+        pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
         mainScope.launch {
             val list = MediaStoreScanner.scan(this@XrActivity)
             pickerHost.setEntries(list)
             pickerHost.setLastPlayed(resumeStore.lastPlayedPath())
         }
+    }
+
+    private fun playUrl(url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return
+        currentPath = trimmed
+        resumeStore.setLastPlayed(trimmed)
+        urlStore.push(trimmed)
+        pickerHost.setUrlHistory(urlStore.list())
+        runOnUiThread {
+            player?.run {
+                setMediaItem(MediaItem.fromUri(trimmed))
+                prepare()
+                seekTo(resumeStore.load(trimmed))
+                playWhenReady = true
+            }
+        }
+        Timber.tag(TAG).i("play url: %s", trimmed)
     }
 
     /** Pick the most recent file the user played; fall back to the bundled
@@ -116,18 +177,30 @@ class XrActivity : NativeActivity() {
         }
     }
 
-    override fun onPause() {
-        player?.playWhenReady = false
-        currentPath?.let { resumeStore.save(it, player?.currentPosition ?: 0L) }
-        super.onPause()
-    }
-
     override fun onDestroy() {
+        sleepTimer.cancel()
         resumeWriterJob?.cancel()
         mainScope.cancel()
         pickerHost.releaseSurface()
         releasePlayer()
         super.onDestroy()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Quest mirrors hardware volume rocker to KEYCODE_VOLUME_UP/DOWN even
+        // in VR mode; we hook them so the user doesn't have to surface the
+        // system volume HUD just to nudge a video.
+        return when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                volumeDelta(VOLUME_KEY_STEP)
+                true
+            }
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                volumeDelta(-VOLUME_KEY_STEP)
+                true
+            }
+            else -> super.onKeyDown(keyCode, event)
+        }
     }
 
     private fun ensurePlayer() {
@@ -192,7 +265,15 @@ class XrActivity : NativeActivity() {
     @Suppress("unused")
     fun togglePlayPause() {
         runOnUiThread {
-            player?.let { it.playWhenReady = !it.playWhenReady }
+            player?.let {
+                it.playWhenReady = !it.playWhenReady
+                if (!it.playWhenReady) {
+                    // Manual pause: clear proximity's "we paused it" flag
+                    // so a subsequent remount doesn't auto-resume against
+                    // the user's intent.
+                    proximity.clearPausedFlag()
+                }
+            }
         }
     }
 
@@ -287,6 +368,7 @@ class XrActivity : NativeActivity() {
         private const val TAG = "VrPlayer/XrActivity"
         private const val DEFAULT_WIDTH = 1920
         private const val DEFAULT_HEIGHT = 1080
+        private const val VOLUME_KEY_STEP = 0.1f
         private const val PREFS = "vrplayer_screen"
         private const val KEY_RADIUS = "radius"
         private const val KEY_ARC = "arc"
