@@ -8,6 +8,18 @@ import android.os.Bundle
 import android.view.Surface
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -31,6 +43,12 @@ class XrActivity : NativeActivity() {
     private var surfaceTexture: SurfaceTexture? = null
     private var videoSurface: Surface? = null
 
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val resumeStore by lazy { ResumeStore(this) }
+    private val pickerHost by lazy { PickerSurfaceHost(this) }
+    private var resumeWriterJob: Job? = null
+    private var currentPath: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Timber.treeCount == 0) {
@@ -42,21 +60,72 @@ class XrActivity : NativeActivity() {
     override fun onResume() {
         super.onResume()
         ensurePlayer()
-        // Loop the bundled sample (a real picker arrives in Stage 1 Sprint 2).
-        val sample = "asset:///sample/spike0_sample.mp4"
+        configurePicker()
+        loadInitialMedia()
+        startResumeWriter()
+    }
+
+    private fun configurePicker() {
+        pickerHost.onPick = { entry -> playEntry(entry) }
+        mainScope.launch {
+            val list = MediaStoreScanner.scan(this@XrActivity)
+            pickerHost.setEntries(list)
+            pickerHost.setLastPlayed(resumeStore.lastPlayedPath())
+        }
+    }
+
+    /** Pick the most recent file the user played; fall back to the bundled
+     *  sample so the headset always has *something* on screen. */
+    private fun loadInitialMedia() {
+        val resumePath = resumeStore.lastPlayedPath()
+        val resumePos = resumePath?.let { resumeStore.load(it) } ?: 0L
+        val uri = resumePath ?: "asset:///sample/spike0_sample.mp4"
+        currentPath = resumePath
         player?.run {
-            setMediaItem(MediaItem.fromUri(sample))
+            setMediaItem(MediaItem.fromUri(uri))
             prepare()
+            seekTo(resumePos)
             playWhenReady = true
+        }
+    }
+
+    private fun playEntry(entry: VideoEntry) {
+        val resume = resumeStore.load(entry.path)
+        currentPath = entry.path
+        resumeStore.setLastPlayed(entry.path)
+        runOnUiThread {
+            player?.run {
+                setMediaItem(MediaItem.fromUri(entry.path))
+                prepare()
+                seekTo(resume)
+                playWhenReady = true
+            }
+        }
+        Timber.tag(TAG).i("play: %s @ %d", entry.path, resume)
+    }
+
+    private fun startResumeWriter() {
+        resumeWriterJob?.cancel()
+        resumeWriterJob = mainScope.launch {
+            while (isActive) {
+                delay(5_000L)
+                val p = currentPath ?: continue
+                val pos = player?.currentPosition ?: continue
+                resumeStore.save(p, pos)
+            }
         }
     }
 
     override fun onPause() {
         player?.playWhenReady = false
+        currentPath?.let { resumeStore.save(it, player?.currentPosition ?: 0L) }
         super.onPause()
     }
 
     override fun onDestroy() {
+        resumeWriterJob?.cancel()
+        mainScope.cancel()
+        pickerHost.releaseSurface()
         releasePlayer()
         super.onDestroy()
     }
@@ -190,6 +259,29 @@ class XrActivity : NativeActivity() {
      *  global volume integration. */
     @Suppress("unused")
     private fun audioStream(): Int = AudioManager.STREAM_MUSIC
+
+    // ---- Picker surface bridge (JNI) ----
+
+    @Suppress("unused")
+    fun acquirePickerSurface(textureId: Int): Surface = pickerHost.acquirePickerSurface(textureId)
+
+    @Suppress("unused")
+    fun pickerWidth(): Int = pickerHost.width
+
+    @Suppress("unused")
+    fun pickerHeight(): Int = pickerHost.height
+
+    @Suppress("unused")
+    fun updatePickerTexImage(): Boolean = pickerHost.updateTexImage()
+
+    @Suppress("unused")
+    fun getPickerTransformMatrix(out: FloatArray) = pickerHost.getTransformMatrix(out)
+
+    /** Native side: laser-pointer ray vs picker-quad intersect → (u,v). */
+    @Suppress("unused")
+    fun injectPickerTap(u: Float, v: Float) {
+        runOnUiThread { pickerHost.injectTap(u, v) }
+    }
 
     companion object {
         private const val TAG = "VrPlayer/XrActivity"

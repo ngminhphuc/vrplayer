@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.composeCompiler)
 }
 
 android {
@@ -46,6 +47,9 @@ android {
     buildFeatures {
         // Required for the Khronos OpenXR loader AAR which ships as a Prefab module.
         prefab = true
+        // World-space picker UI is built with Compose, rendered into a Surface,
+        // and projected onto a textured quad inside the OpenXR scene.
+        compose = true
     }
 
     packaging {
@@ -64,6 +68,14 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.activity.compose)
+
+    // Compose for the world-space picker.
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.iconsExtended)
+    implementation(libs.androidx.compose.ui.tooling.preview)
 
     // OpenXR loader for Android (Khronos)
     implementation(libs.khronos.openxr.loader)

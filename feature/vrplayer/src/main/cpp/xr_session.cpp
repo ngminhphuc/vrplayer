@@ -2,6 +2,7 @@
 
 #include "gl_renderer.h"
 #include "log.h"
+#include "picker_quad.h"
 #include "screen.h"
 #include "video_bridge.h"
 
@@ -247,11 +248,43 @@ void XrSession::processInput(XrTime predictedTime) {
     if (!mInputAttached) return;
     mInput.sync(mSession, mAppSpace, predictedTime);
 
+    // When the picker is open, trigger acts as "click on hovered item".
+    // Otherwise it's the global play/pause shortcut.
     if (mInput.triggerPressedEdge) {
-        VideoBridge::togglePlayPause();
+        if (PickerQuad::visible()) {
+            float u = 0.f, v = 0.f;
+            // Use the aim of whichever hand actually pulled the trigger.
+            // If both fire in the same frame, prefer right; if neither
+            // (shouldn't happen because triggerPressedEdge implies at
+            // least one), fall back to whichever has valid orientation.
+            const XrSpaceLocation* aim = nullptr;
+            if (mInput.triggerRightEdge) {
+                aim = &mInput.rightAim;
+            } else if (mInput.triggerLeftEdge) {
+                aim = &mInput.leftAim;
+            } else if (mInput.rightAim.locationFlags &
+                       XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) {
+                aim = &mInput.rightAim;
+            } else {
+                aim = &mInput.leftAim;
+            }
+            if (PickerQuad::hitTest(aim->pose, &u, &v)) {
+                VideoBridge::injectPickerTap(u, v);
+                PickerQuad::setVisible(false);
+            }
+        } else {
+            VideoBridge::togglePlayPause();
+        }
     }
     if (mInput.menuTapEdge) {
-        recenter();
+        // Tap menu = toggle picker. Long-press = recenter (Sprint 3 will
+        // disambiguate with a press-duration timer).
+        const bool nowVisible = !PickerQuad::visible();
+        PickerQuad::setVisible(nowVisible);
+        if (nowVisible && VideoBridge::pickerTextureId() == 0) {
+            VideoBridge::requestPickerSurface();
+        }
+        if (!nowVisible) recenter();
     }
 
     // Thumbstick X -> seek (rate-limited to one event / 250 ms).

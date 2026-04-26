@@ -16,7 +16,14 @@ jmethodID VideoBridge::sTogglePlayPause = nullptr;
 jmethodID VideoBridge::sSeekDelta = nullptr;
 jmethodID VideoBridge::sVolumeDelta = nullptr;
 jmethodID VideoBridge::sPersistTransform = nullptr;
+jmethodID VideoBridge::sAcquirePicker = nullptr;
+jmethodID VideoBridge::sUpdatePicker = nullptr;
+jmethodID VideoBridge::sGetPickerTexMat = nullptr;
+jmethodID VideoBridge::sInjectPickerTap = nullptr;
+jmethodID VideoBridge::sPickerWidth = nullptr;
+jmethodID VideoBridge::sPickerHeight = nullptr;
 uint32_t VideoBridge::sTextureId = 0;
+uint32_t VideoBridge::sPickerTexId = 0;
 
 namespace {
 JavaVM* sVm = nullptr;
@@ -54,6 +61,15 @@ void VideoBridge::attach(JNIEnv* env, jobject xrActivity) {
     sVolumeDelta = env->GetMethodID(cls, "volumeDelta", "(F)V");
     sPersistTransform =
         env->GetMethodID(cls, "persistScreenTransform", "(FFFFFF)V");
+    sAcquirePicker =
+        env->GetMethodID(cls, "acquirePickerSurface",
+                         "(I)Landroid/view/Surface;");
+    sUpdatePicker = env->GetMethodID(cls, "updatePickerTexImage", "()Z");
+    sGetPickerTexMat =
+        env->GetMethodID(cls, "getPickerTransformMatrix", "([F)V");
+    sInjectPickerTap = env->GetMethodID(cls, "injectPickerTap", "(FF)V");
+    sPickerWidth = env->GetMethodID(cls, "pickerWidth", "()I");
+    sPickerHeight = env->GetMethodID(cls, "pickerHeight", "()I");
     env->DeleteLocalRef(cls);
 
     if (!sAcquireSurface || !sUpdateTexImage || !sGetTransformMatrix) {
@@ -65,6 +81,14 @@ void VideoBridge::detach(JNIEnv* env) {
     if (sActivityRef) env->DeleteGlobalRef(sActivityRef);
     sActivityRef = nullptr;
     sAcquireSurface = sUpdateTexImage = sGetTransformMatrix = nullptr;
+    sTogglePlayPause = sSeekDelta = sVolumeDelta = sPersistTransform = nullptr;
+    sAcquirePicker = sUpdatePicker = sGetPickerTexMat = nullptr;
+    sInjectPickerTap = sPickerWidth = sPickerHeight = nullptr;
+    // GL textures live on the render thread's context which is torn down
+    // alongside the activity, so reset the cached id to force a re-allocate
+    // on the next attach (avoids handing Kotlin a stale handle on relaunch).
+    sTextureId = 0;
+    sPickerTexId = 0;
 }
 
 void VideoBridge::requestSurface() {
@@ -169,6 +193,90 @@ void VideoBridge::persistScreenTransform(float radius, float arc, float height,
                  env->CallVoidMethod(sActivityRef, m, radius, arc, height,
                                      yaw, yOffset, zOffset);
              });
+}
+
+void VideoBridge::requestPickerSurface() {
+    if (!sActivityRef || !sAcquirePicker) return;
+    if (sPickerTexId == 0) sPickerTexId = GlRenderer::createVideoTexture();
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    jobject s = env->CallObjectMethod(sActivityRef, sAcquirePicker,
+                                       static_cast<jint>(sPickerTexId));
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (s) env->DeleteLocalRef(s);
+    detachEnv(need);
+}
+
+void VideoBridge::updatePickerTexImage() {
+    if (!sActivityRef || !sUpdatePicker) return;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    env->CallBooleanMethod(sActivityRef, sUpdatePicker);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    detachEnv(need);
+}
+
+void VideoBridge::getPickerTransformMatrix(float out[16]) {
+    // Identity fallback — fill before any early-return path.
+    for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
+    if (!sActivityRef || !sGetPickerTexMat) return;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    jfloatArray arr = env->NewFloatArray(16);
+    env->CallVoidMethod(sActivityRef, sGetPickerTexMat, arr);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
+    } else {
+        env->GetFloatArrayRegion(arr, 0, 16, out);
+    }
+    env->DeleteLocalRef(arr);
+    detachEnv(need);
+}
+
+void VideoBridge::injectPickerTap(float u, float v) {
+    if (!sActivityRef || !sInjectPickerTap) return;
+    callVoid(sInjectPickerTap, [u, v](JNIEnv* env, jmethodID m) {
+        env->CallVoidMethod(sActivityRef, m, u, v);
+    });
+}
+
+int VideoBridge::pickerWidth() {
+    if (!sActivityRef || !sPickerWidth) return 1024;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return 1024;
+    jint w = env->CallIntMethod(sActivityRef, sPickerWidth);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        w = 1024;
+    }
+    detachEnv(need);
+    return static_cast<int>(w);
+}
+
+int VideoBridge::pickerHeight() {
+    if (!sActivityRef || !sPickerHeight) return 720;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return 720;
+    jint h = env->CallIntMethod(sActivityRef, sPickerHeight);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        h = 720;
+    }
+    detachEnv(need);
+    return static_cast<int>(h);
 }
 
 }  // namespace vrplayer

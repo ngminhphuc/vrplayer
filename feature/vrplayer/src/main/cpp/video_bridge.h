@@ -31,6 +31,16 @@ public:
     static void persistScreenTransform(float radius, float arc, float height,
                                        float yaw, float yOffset, float zOffset);
 
+    /** Picker surface (Compose-rendered) bridge. */
+    static void requestPickerSurface();
+    static void updatePickerTexImage();
+    static void getPickerTransformMatrix(float out[16]);
+    static void injectPickerTap(float u, float v);
+    static int pickerWidth();
+    static int pickerHeight();
+    static uint32_t pickerTextureId() { return sPickerTexId; }
+    static void setPickerTextureId(uint32_t id) { sPickerTexId = id; }
+
 private:
     static jobject sActivityRef;
     static jmethodID sAcquireSurface;
@@ -40,7 +50,14 @@ private:
     static jmethodID sSeekDelta;
     static jmethodID sVolumeDelta;
     static jmethodID sPersistTransform;
+    static jmethodID sAcquirePicker;
+    static jmethodID sUpdatePicker;
+    static jmethodID sGetPickerTexMat;
+    static jmethodID sInjectPickerTap;
+    static jmethodID sPickerWidth;
+    static jmethodID sPickerHeight;
     static uint32_t sTextureId;
+    static uint32_t sPickerTexId;
 };
 
 }  // namespace vrplayer
