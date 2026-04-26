@@ -213,8 +213,13 @@ class XrActivity : NativeActivity() {
         }
         // Resume must keep its last projection. Without this, a 360°/180°
         // file restored from resumeStore would silently fall back to the
-        // cinema cylinder until the user re-picked a file.
-        resumePath?.let { applyProjectionFor(it) }
+        // cinema cylinder until the user re-picked a file. Also push the
+        // saved bookmarks for this path into the picker so the Playback
+        // tab is populated on first open instead of waiting for a re-pick.
+        resumePath?.let {
+            resetPerFileState(it)
+            applyProjectionFor(it)
+        }
     }
 
     private fun playEntry(entry: VideoEntry) {
@@ -290,11 +295,15 @@ class XrActivity : NativeActivity() {
                 sinceLastSave += 250L
                 val p = currentPath ?: continue
                 val pos = player?.currentPosition ?: continue
-                abLoop.seekTargetIfPastB(pos)?.let { target ->
+                // Capture the loop target so the resume-save below uses the
+                // post-seek position. Without this, a tick that both saves
+                // and triggers the loop persists a position past B; on next
+                // launch the player would resume past the loop and skip A.
+                val seeked = abLoop.seekTargetIfPastB(pos)?.also { target ->
                     player?.seekTo(target)
                 }
                 if (sinceLastSave >= 5_000L) {
-                    resumeStore.save(p, pos)
+                    resumeStore.save(p, seeked ?: pos)
                     sinceLastSave = 0L
                 }
             }
