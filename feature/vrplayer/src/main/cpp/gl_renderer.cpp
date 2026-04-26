@@ -8,6 +8,7 @@
 #include "screen.h"
 #include "skybox.h"
 #include "sphere.h"
+#include "stereo.h"
 #include "video_bridge.h"
 
 #include <GLES3/gl3.h>
@@ -26,6 +27,19 @@ bool sShowLeftPointer = false;
 bool sShowRightPointer = false;
 XrPosef sLeftPose{};
 XrPosef sRightPose{};
+
+// Build a column-major 4x4 that scales the input UV (treated as the .xy of
+// a vec4) and adds an offset. Used to crop the video texture into per-eye
+// halves for SBS / TB stereo content.
+void buildStereoCrop(const float scaleOffset[4], float out[16]) {
+    for (int i = 0; i < 16; ++i) out[i] = 0.f;
+    out[0] = scaleOffset[0];
+    out[5] = scaleOffset[1];
+    out[10] = 1.f;
+    out[12] = scaleOffset[2];
+    out[13] = scaleOffset[3];
+    out[15] = 1.f;
+}
 
 void ensureDepth(int32_t w, int32_t h) {
     if (sDepthRb && w == sDepthW && h == sDepthH) return;
@@ -84,7 +98,7 @@ void GlRenderer::setPointer(bool leftActive, const XrPosef& leftPose,
 }
 
 void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
-                           const XrView& view) {
+                           const XrView& view, int eyeIndex) {
     ensureDepth(width, height);
     glBindFramebuffer(GL_FRAMEBUFFER, sFbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
@@ -114,11 +128,20 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
     float texMatrix[16];
     VideoBridge::getTransformMatrix(texMatrix);
 
+    // Compose stereo UV crop (right-multiply) so each eye samples its half
+    // of the texture. For mono this is identity → behaves as before.
+    float stereoCrop[16];
+    float stereoUv[4];
+    Stereo::uvScaleOffset(eyeIndex, stereoUv);
+    buildStereoCrop(stereoUv, stereoCrop);
+    float texMatrixEye[16];
+    mu::multiply(texMatrix, stereoCrop, texMatrixEye);
+
     // 2. Either the cinema cylinder OR the immersive 360/180 sphere.
     if (Sphere::mode() == Sphere::Mode::Off) {
-        Screen::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
+        Screen::draw(VideoBridge::textureId(), proj, viewMat, texMatrixEye);
     } else {
-        Sphere::draw(VideoBridge::textureId(), proj, viewMat, texMatrix);
+        Sphere::draw(VideoBridge::textureId(), proj, viewMat, texMatrixEye);
     }
 
     // 3. Picker (if visible). Pull its surface texture too.

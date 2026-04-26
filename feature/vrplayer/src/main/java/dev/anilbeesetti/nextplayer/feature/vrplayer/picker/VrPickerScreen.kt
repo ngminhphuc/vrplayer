@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
+import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 
 private enum class PickerTab { Local, Network, Settings }
 
@@ -57,6 +58,8 @@ fun VrPickerScreen(
     onSleepTimerArm: (Int) -> Unit,
     projectionMode: ProjectionMode?,
     onProjectionChange: (ProjectionMode?) -> Unit,
+    stereoMode: StereoMode?,
+    onStereoChange: (StereoMode?) -> Unit,
     onSnapFront: () -> Unit,
     lastPlayedPath: String?,
 ) {
@@ -81,6 +84,8 @@ fun VrPickerScreen(
                         onSleepTimerArm,
                         projectionMode,
                         onProjectionChange,
+                        stereoMode,
+                        onStereoChange,
                         onSnapFront,
                     )
                 }
@@ -231,6 +236,8 @@ private fun SettingsTab(
     onArm: (Int) -> Unit,
     projectionMode: ProjectionMode?,
     onProjectionChange: (ProjectionMode?) -> Unit,
+    stereoMode: StereoMode?,
+    onStereoChange: (StereoMode?) -> Unit,
     onSnapFront: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -269,6 +276,23 @@ private fun SettingsTab(
             TabChip("180°", projectionMode == ProjectionMode.HEMISPHERE_180) {
                 onProjectionChange(ProjectionMode.HEMISPHERE_180)
             }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Stereo 3D", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Auto = phát hiện theo tên file (_sbs/_lr/_tb/_ou). Chuyển nếu mắt thấy ngược.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip("Auto", stereoMode == null) { onStereoChange(null) }
+            TabChip("Mono", stereoMode == StereoMode.MONO) { onStereoChange(StereoMode.MONO) }
+            TabChip("SBS L|R", stereoMode == StereoMode.SBS_LR) { onStereoChange(StereoMode.SBS_LR) }
+            TabChip("SBS R|L", stereoMode == StereoMode.SBS_RL) { onStereoChange(StereoMode.SBS_RL) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip("TB L/R", stereoMode == StereoMode.TB_LR) { onStereoChange(StereoMode.TB_LR) }
+            TabChip("TB R/L", stereoMode == StereoMode.TB_RL) { onStereoChange(StereoMode.TB_RL) }
         }
         Spacer(Modifier.height(8.dp))
         TabChip("Snap front (recenter)", false, onSnapFront)
