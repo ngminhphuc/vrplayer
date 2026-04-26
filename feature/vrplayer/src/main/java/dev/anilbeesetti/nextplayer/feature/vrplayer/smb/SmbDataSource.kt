@@ -37,7 +37,12 @@ class SmbDataSource(
         val share = pathParts[0]
         val remotePath = pathParts.drop(1).joinToString("\\")
 
-        val server = store.list().firstOrNull { it.host == host && it.share == share }
+        // SMB host/share is case-insensitive by spec. The Network tab path
+        // lets the user type a smb:// URL directly, where the casing won't
+        // necessarily match how the server was registered in the SMB tab.
+        val server = store.list().firstOrNull {
+            it.host.equals(host, ignoreCase = true) && it.share.equals(share, ignoreCase = true)
+        }
             ?: throw IOException("Unknown SMB server $host/$share")
         val pwd = store.password(server.id) ?: throw IOException("Missing password for ${server.displayName}")
 
