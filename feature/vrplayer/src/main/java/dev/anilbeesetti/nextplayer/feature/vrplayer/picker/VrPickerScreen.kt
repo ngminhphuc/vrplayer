@@ -383,7 +383,14 @@ private fun SmbTab(
                                 fontSize = 13.sp,
                             )
                         }
-                        TabChip("X", false) { onRemove(s.id) }
+                        TabChip("X", false) {
+                            // Clear local selection first so the Play button
+                            // disables on the same recompose; otherwise it
+                            // would still hold the stale server and try to
+                            // play an `smb://` URI that no longer resolves.
+                            if (selected?.id == s.id) selected = null
+                            onRemove(s.id)
+                        }
                     }
                 }
             }
