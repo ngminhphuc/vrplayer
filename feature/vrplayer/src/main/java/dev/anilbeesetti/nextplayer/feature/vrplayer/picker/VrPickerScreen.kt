@@ -38,8 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
+import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
 
-private enum class PickerTab { Local, Network, Settings }
+private enum class PickerTab { Local, Network, Smb, Settings }
 
 /**
  * World-space picker UI — designed to render into a 1.2 m × 0.8 m quad in
@@ -62,6 +63,10 @@ fun VrPickerScreen(
     onStereoChange: (StereoMode?) -> Unit,
     onSnapFront: () -> Unit,
     lastPlayedPath: String?,
+    smbServers: List<SmbServer> = emptyList(),
+    onSmbAdd: (host: String, share: String, user: String, pass: String, domain: String?) -> Unit = { _, _, _, _, _ -> },
+    onSmbRemove: (id: String) -> Unit = {},
+    onSmbPlay: (server: SmbServer, path: String) -> Unit = { _, _ -> },
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -79,6 +84,7 @@ fun VrPickerScreen(
                 when (tab) {
                     PickerTab.Local -> LocalTab(entries, lastPlayedPath, onPick)
                     PickerTab.Network -> NetworkTab(urlHistory, onPickUrl, onUrlSubmit)
+                    PickerTab.Smb -> SmbTab(smbServers, onSmbAdd, onSmbRemove, onSmbPlay)
                     PickerTab.Settings -> SettingsTab(
                         sleepTimerMinutes,
                         onSleepTimerArm,
@@ -303,6 +309,141 @@ private fun SettingsTab(
             fontSize = 16.sp,
         )
     }
+}
+
+@Composable
+private fun SmbTab(
+    servers: List<SmbServer>,
+    onAdd: (host: String, share: String, user: String, pass: String, domain: String?) -> Unit,
+    onRemove: (id: String) -> Unit,
+    onPlay: (server: SmbServer, path: String) -> Unit,
+) {
+    var host by remember { mutableStateOf("") }
+    var share by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
+    var domain by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf<SmbServer?>(null) }
+    var path by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("SMB / NAS", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Thêm server, chọn từ danh sách rồi nhập đường dẫn file (vd. movies/dune.mkv).",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmbField("Host", host, { host = it }, Modifier.weight(1f))
+            SmbField("Share", share, { share = it }, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmbField("User", user, { user = it }, Modifier.weight(1f))
+            SmbField("Password", pass, { pass = it }, Modifier.weight(1f), isPassword = true)
+            SmbField("Domain", domain, { domain = it }, Modifier.weight(1f))
+        }
+        Button(
+            onClick = {
+                if (host.isNotBlank() && share.isNotBlank()) {
+                    onAdd(host.trim(), share.trim(), user.trim(), pass, domain.trim().takeIf { it.isNotEmpty() })
+                    host = ""
+                    share = ""
+                    user = ""
+                    pass = ""
+                    domain = ""
+                }
+            },
+            enabled = host.isNotBlank() && share.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6BB1FF)),
+        ) { Text("Thêm server", color = Color.Black, fontSize = 16.sp) }
+
+        Spacer(Modifier.height(4.dp))
+        if (servers.isEmpty()) {
+            Text("Chưa có server nào.", color = Color(0xFF9AA3B0), fontSize = 16.sp)
+        } else {
+            servers.forEach { s ->
+                val isSel = selected?.id == s.id
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(s.id) { awaitPointer { selected = s } },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSel) Color(0xFF1F2937) else Color(0xFF161A22),
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.displayName, color = Color.White, fontSize = 16.sp)
+                            Text(
+                                "${s.host}/${s.share} as ${s.username.ifBlank { "guest" }}",
+                                color = Color(0xFF9AA3B0),
+                                fontSize = 13.sp,
+                            )
+                        }
+                        TabChip("X", false) {
+                            // Clear local selection first so the Play button
+                            // disables on the same recompose; otherwise it
+                            // would still hold the stale server and try to
+                            // play an `smb://` URI that no longer resolves.
+                            if (selected?.id == s.id) selected = null
+                            onRemove(s.id)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Đã chọn: ${selected?.displayName ?: "—"}",
+                color = Color(0xFF9AA3B0),
+                fontSize = 14.sp,
+            )
+            SmbField("Path (vd. movies/dune.mkv)", path, { path = it }, Modifier.fillMaxWidth())
+            Button(
+                onClick = {
+                    selected?.let { onPlay(it, path.trim()) }
+                },
+                enabled = selected != null && path.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6BB1FF)),
+            ) { Text("Phát", color = Color.Black, fontSize = 18.sp) }
+        }
+    }
+}
+
+@Composable
+private fun SmbField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    isPassword: Boolean = false,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onChange,
+        textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+        visualTransformation = if (isPassword) {
+            androidx.compose.ui.text.input.PasswordVisualTransformation()
+        } else {
+            androidx.compose.ui.text.input.VisualTransformation.None
+        },
+        decorationBox = { inner ->
+            Column {
+                Text(label, color = Color(0xFF9AA3B0), fontSize = 12.sp)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .background(Color(0xFF161A22), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                ) { inner() }
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable

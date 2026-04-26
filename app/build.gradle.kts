@@ -93,6 +93,10 @@ android {
     packaging {
         resources {
             excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+            // smbj pulls in BouncyCastle which duplicates JSpecify's
+            // OSGI module-info bundle entry; pick first to deduplicate.
+            pickFirsts.add("META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+            pickFirsts.add("META-INF/versions/9/module-info.class")
         }
     }
 

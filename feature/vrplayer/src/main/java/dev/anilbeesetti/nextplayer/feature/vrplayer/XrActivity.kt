@@ -8,7 +8,10 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.Surface
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
@@ -20,6 +23,8 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProximityAutoPause
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.SleepTimer
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoDetector
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
+import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
+import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServerStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,6 +59,7 @@ class XrActivity : NativeActivity() {
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val resumeStore by lazy { ResumeStore(this) }
     private val urlStore by lazy { UrlHistoryStore(this) }
+    private val smbStore by lazy { SmbServerStore(this) }
     private val pickerHost by lazy { PickerSurfaceHost(this) }
     private val sleepTimer by lazy {
         SleepTimer {
@@ -117,10 +123,35 @@ class XrActivity : NativeActivity() {
         pickerHost.onProjectionChange = { mode -> setProjectionOverride(mode) }
         pickerHost.onStereoChange = { mode -> setStereoOverride(mode) }
         pickerHost.onSnapFront = { snapFront() }
+        pickerHost.onSmbAdd = { host, share, user, pass, domain ->
+            smbStore.add(
+                SmbServer(id = "", host = host, share = share, username = user, domain = domain),
+                pass,
+            )
+            pickerHost.setSmbServers(smbStore.list())
+        }
+        pickerHost.onSmbRemove = { id ->
+            smbStore.remove(id)
+            pickerHost.setSmbServers(smbStore.list())
+        }
+        pickerHost.onSmbPlay = { server, path ->
+            val cleanPath = path.trim('/', '\\').replace('\\', '/')
+            // Use Uri.Builder so reserved chars in filenames (#, ?, %, space)
+            // get percent-encoded. Raw "smb://host/share/movie #2.mkv" would
+            // be parsed by Uri.parse as fragment "2.mkv" and SmbDataSource
+            // would then try to open the wrong (truncated) path.
+            val builder = android.net.Uri.Builder()
+                .scheme("smb")
+                .authority(server.host)
+                .appendPath(server.share)
+            cleanPath.split('/').filter { it.isNotEmpty() }.forEach { builder.appendPath(it) }
+            playUrl(builder.build().toString())
+        }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
         pickerHost.setUrlHistory(urlStore.list())
         pickerHost.setSleepMinutes(sleepTimer.armedMinutes)
+        pickerHost.setSmbServers(smbStore.list())
         mainScope.launch {
             val list = MediaStoreScanner.scan(this@XrActivity)
             pickerHost.setEntries(list)
@@ -258,7 +289,21 @@ class XrActivity : NativeActivity() {
 
     private fun ensurePlayer() {
         if (player != null) return
-        val exo = ExoPlayer.Builder(this).build()
+        // Custom DataSource.Factory routes smb:// URIs through SmbDataSource
+        // (smbj-backed) and falls through to DefaultDataSource for
+        // file://, content://, http(s)://, asset:// — keeping ExoPlayer's
+        // built-in semantics for the common path.
+        val store = smbStore
+        val defaultFactory = DefaultDataSource.Factory(this)
+        val factory = DataSource.Factory {
+            dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbAwareDataSource(
+                store,
+                defaultFactory.createDataSource(),
+            )
+        }
+        val exo = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
+            .build()
         player = exo
     }
 
