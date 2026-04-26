@@ -553,6 +553,18 @@ class XrActivity : NativeActivity() {
         pickerHost.setSubtitleCue("")
         subtitleHost.setCue("")
         nativeSetSubtitleVisible(false)
+        // When the user explicitly clears the subtitle, build the MediaItem
+        // without the auto-scan fallback for THIS playback. Otherwise
+        // buildMediaItem would silently re-attach the same sidecar from
+        // disk and the user would never be able to clear it. resetPerFileState
+        // still re-runs auto-scan on the next file open, which matches the
+        // sprint 4-5 docs ("Bỏ phụ đề → set null vào store, lần mở sau
+        // auto-detect lại").
+        val mediaItem = if (subtitleUri == null) {
+            MediaItem.fromUri(key)
+        } else {
+            buildMediaItem(key)
+        }
         // Preserve the user's pause/play intent. setExternalSubtitle is a
         // mid-playback swap of the same file, not a fresh start, so forcing
         // playWhenReady=true would resume a paused video the moment the
@@ -561,7 +573,7 @@ class XrActivity : NativeActivity() {
         val pos = player?.currentPosition ?: 0L
         runOnUiThread {
             player?.run {
-                setMediaItem(buildMediaItem(key))
+                setMediaItem(mediaItem)
                 prepare()
                 seekTo(pos)
                 playWhenReady = wasPlaying
