@@ -41,7 +41,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
 
-private enum class PickerTab { Local, Network, Smb, Settings }
+private enum class PickerTab { Local, Network, Smb, Playback, Settings }
 
 /**
  * World-space picker UI — designed to render into a 1.2 m × 0.8 m quad in
@@ -70,6 +70,15 @@ fun VrPickerScreen(
     onSmbPlay: (server: SmbServer, path: String) -> Unit = { _, _ -> },
     environmentMode: EnvironmentMode = EnvironmentMode.BlackVoid,
     onEnvironmentChange: (EnvironmentMode) -> Unit = {},
+    abPointA: Long = -1L,
+    abPointB: Long = -1L,
+    bookmarks: List<Long> = emptyList(),
+    onSetLoopA: () -> Unit = {},
+    onSetLoopB: () -> Unit = {},
+    onClearLoop: () -> Unit = {},
+    onAddBookmark: () -> Unit = {},
+    onSeekBookmark: (Long) -> Unit = {},
+    onRemoveBookmark: (Long) -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -88,6 +97,17 @@ fun VrPickerScreen(
                     PickerTab.Local -> LocalTab(entries, lastPlayedPath, onPick)
                     PickerTab.Network -> NetworkTab(urlHistory, onPickUrl, onUrlSubmit)
                     PickerTab.Smb -> SmbTab(smbServers, onSmbAdd, onSmbRemove, onSmbPlay)
+                    PickerTab.Playback -> PlaybackTab(
+                        abPointA,
+                        abPointB,
+                        bookmarks,
+                        onSetLoopA,
+                        onSetLoopB,
+                        onClearLoop,
+                        onAddBookmark,
+                        onSeekBookmark,
+                        onRemoveBookmark,
+                    )
                     PickerTab.Settings -> SettingsTab(
                         sleepTimerMinutes,
                         onSleepTimerArm,
@@ -239,6 +259,72 @@ private fun NetworkTab(
             }
         }
     }
+}
+
+@Composable
+private fun PlaybackTab(
+    abPointA: Long,
+    abPointB: Long,
+    bookmarks: List<Long>,
+    onSetLoopA: () -> Unit,
+    onSetLoopB: () -> Unit,
+    onClearLoop: () -> Unit,
+    onAddBookmark: () -> Unit,
+    onSeekBookmark: (Long) -> Unit,
+    onRemoveBookmark: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("A-B loop", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Đặt điểm A rồi B; player sẽ tự seek về A khi vượt B. Chỉ áp dụng phiên hiện tại.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip(
+                label = if (abPointA >= 0) "A: ${formatMs(abPointA)}" else "Đặt A",
+                selected = abPointA >= 0,
+                onClick = onSetLoopA,
+            )
+            TabChip(
+                label = if (abPointB >= 0) "B: ${formatMs(abPointB)}" else "Đặt B",
+                selected = abPointB >= 0,
+                onClick = onSetLoopB,
+            )
+            TabChip(label = "Xoá", selected = false, onClick = onClearLoop)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Bookmark", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Đánh dấu thời điểm trong file đang phát. Lưu vĩnh viễn theo từng path.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        TabChip(label = "+ Thêm bookmark tại vị trí hiện tại", selected = false, onClick = onAddBookmark)
+        if (bookmarks.isEmpty()) {
+            Text("Chưa có bookmark nào", color = Color(0xFF9AA3B0), fontSize = 16.sp)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(bookmarks) { ms ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TabChip(label = formatMs(ms), selected = false) { onSeekBookmark(ms) }
+                        TabChip(label = "Xoá", selected = false) { onRemoveBookmark(ms) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatMs(ms: Long): String {
+    val totalSec = (ms / 1000L).coerceAtLeast(0L)
+    val h = totalSec / 3600L
+    val m = (totalSec % 3600L) / 60L
+    val s = totalSec % 60L
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 @Composable

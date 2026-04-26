@@ -47,6 +47,9 @@ class PickerSurfaceHost(
     private val smbServers = mutableListOf<dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer>().toMutableStateList()
     private val environmentMode =
         mutableStateOf(dev.anilbeesetti.nextplayer.feature.vrplayer.playback.EnvironmentMode.BlackVoid)
+    private val abPointA = mutableStateOf(-1L)
+    private val abPointB = mutableStateOf(-1L)
+    private val bookmarks: SnapshotStateList<Long> = mutableListOf<Long>().toMutableStateList()
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -59,6 +62,12 @@ class PickerSurfaceHost(
     var onSmbAdd: ((host: String, share: String, user: String, pass: String, domain: String?) -> Unit)? = null
     var onSmbRemove: ((id: String) -> Unit)? = null
     var onSmbPlay: ((server: dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer, path: String) -> Unit)? = null
+    var onSetLoopA: (() -> Unit)? = null
+    var onSetLoopB: (() -> Unit)? = null
+    var onClearLoop: (() -> Unit)? = null
+    var onAddBookmark: (() -> Unit)? = null
+    var onSeekBookmark: ((Long) -> Unit)? = null
+    var onRemoveBookmark: ((Long) -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
     fun acquirePickerSurface(textureId: Int): Surface {
@@ -129,6 +138,16 @@ class PickerSurfaceHost(
         environmentMode.value = mode
     }
 
+    fun setAbLoop(a: Long, b: Long) {
+        abPointA.value = a
+        abPointB.value = b
+    }
+
+    fun setBookmarks(list: List<Long>) {
+        bookmarks.clear()
+        bookmarks.addAll(list)
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -188,6 +207,15 @@ class PickerSurfaceHost(
                         environmentMode.value = m
                         onEnvironmentChange?.invoke(m)
                     },
+                    abPointA = abPointA.value,
+                    abPointB = abPointB.value,
+                    bookmarks = bookmarks,
+                    onSetLoopA = { onSetLoopA?.invoke() },
+                    onSetLoopB = { onSetLoopB?.invoke() },
+                    onClearLoop = { onClearLoop?.invoke() },
+                    onAddBookmark = { onAddBookmark?.invoke() },
+                    onSeekBookmark = { ms -> onSeekBookmark?.invoke(ms) },
+                    onRemoveBookmark = { ms -> onRemoveBookmark?.invoke(ms) },
                 )
             }
             measure(
