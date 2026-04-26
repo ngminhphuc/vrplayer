@@ -35,6 +35,7 @@ add_library(vrplayer SHARED
     native_calls.cpp
     pointer.cpp
     picker_quad.cpp
+    subtitle_quad.cpp
     input.cpp
     video_bridge.cpp
 )

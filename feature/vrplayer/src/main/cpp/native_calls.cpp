@@ -2,6 +2,8 @@
 #include "skybox.h"
 #include "sphere.h"
 #include "stereo.h"
+#include "subtitle_quad.h"
+#include "video_bridge.h"
 
 #include <jni.h>
 
@@ -67,6 +69,17 @@ Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetEnvironmen
     }
     vrplayer::Skybox::setMode(m);
     VRP_LOGI("Environment mode -> %d", mode);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetSubtitleVisible(
+    JNIEnv*, jobject, jboolean visible) {
+    // Just flip the visibility flag; the render thread (which owns the
+    // GL context) handles the lazy texture/Surface creation in
+    // GlRenderer::renderEye. Calling requestSubtitleSurface() here from
+    // the JNI/main thread would trigger glGenTextures with no current
+    // GL context and silently leave sSubtitleTexId == 0 forever.
+    vrplayer::SubtitleQuad::setVisible(visible == JNI_TRUE);
 }
 
 }  // extern "C"

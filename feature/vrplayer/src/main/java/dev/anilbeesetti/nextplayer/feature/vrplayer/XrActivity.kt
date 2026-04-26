@@ -18,6 +18,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PlayerStatus
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitleStore
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitleSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ABLoop
@@ -70,6 +71,7 @@ class XrActivity : NativeActivity() {
     private var currentCue = ""
     private val abLoop = ABLoop()
     private val pickerHost by lazy { PickerSurfaceHost(this) }
+    private val subtitleHost by lazy { SubtitleSurfaceHost(this) }
     private val sleepTimer by lazy {
         SleepTimer {
             player?.playWhenReady = false
@@ -288,6 +290,7 @@ class XrActivity : NativeActivity() {
     private external fun nativeRotateYaw(degrees: Float)
     private external fun nativeSetStereo(mode: Int)
     private external fun nativeSetEnvironment(mode: Int)
+    private external fun nativeSetSubtitleVisible(visible: Boolean)
 
     private fun startResumeWriter() {
         resumeWriterJob?.cancel()
@@ -363,6 +366,8 @@ class XrActivity : NativeActivity() {
         // Subtitle tab shows whether a sidecar is linked for this file.
         pickerHost.setSubtitleUri(subtitleStore.get(path))
         pickerHost.setSubtitleCue("")
+        subtitleHost.setCue("")
+        nativeSetSubtitleVisible(false)
     }
 
     override fun onDestroy() {
@@ -370,6 +375,7 @@ class XrActivity : NativeActivity() {
         resumeWriterJob?.cancel()
         mainScope.cancel()
         pickerHost.releaseSurface()
+        subtitleHost.releaseSurface()
         releasePlayer()
         super.onDestroy()
     }
@@ -476,6 +482,8 @@ class XrActivity : NativeActivity() {
         // file change, not on add/remove of subtitle for the same file.
         pickerHost.setSubtitleUri(subtitleUri)
         pickerHost.setSubtitleCue("")
+        subtitleHost.setCue("")
+        nativeSetSubtitleVisible(false)
         // Preserve the user's pause/play intent. setExternalSubtitle is a
         // mid-playback swap of the same file, not a fresh start, so forcing
         // playWhenReady=true would resume a paused video the moment the
@@ -536,6 +544,12 @@ class XrActivity : NativeActivity() {
                 val joined = cueGroup.cues.joinToString("\n") { it.text?.toString().orEmpty() }
                 currentCue = joined
                 pickerHost.setSubtitleCue(joined)
+                // Drive the head-locked subtitle quad. Push the text into the
+                // dedicated SubtitleSurfaceHost and flip native visibility so
+                // the quad disappears between cues instead of caching the
+                // last frame on screen indefinitely.
+                subtitleHost.setCue(joined)
+                nativeSetSubtitleVisible(joined.isNotEmpty())
             }
         })
         player = exo
@@ -695,6 +709,25 @@ class XrActivity : NativeActivity() {
     fun injectPickerTap(u: Float, v: Float) {
         runOnUiThread { pickerHost.injectTap(u, v) }
     }
+
+    // ---- Subtitle surface bridge (JNI) ----
+
+    @Suppress("unused")
+    fun acquireSubtitleSurface(textureId: Int): Surface =
+        subtitleHost.acquireSubtitleSurface(textureId)
+
+    @Suppress("unused")
+    fun subtitleWidth(): Int = subtitleHost.width
+
+    @Suppress("unused")
+    fun subtitleHeight(): Int = subtitleHost.height
+
+    @Suppress("unused")
+    fun updateSubtitleTexImage(): Boolean = subtitleHost.updateTexImage()
+
+    @Suppress("unused")
+    fun getSubtitleTransformMatrix(out: FloatArray) =
+        subtitleHost.getTransformMatrix(out)
 
     companion object {
         private const val TAG = "VrPlayer/XrActivity"
