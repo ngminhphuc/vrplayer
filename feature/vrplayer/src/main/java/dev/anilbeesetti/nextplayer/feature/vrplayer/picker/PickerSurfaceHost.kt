@@ -53,6 +53,8 @@ class PickerSurfaceHost(
     private val playerStatus = mutableStateOf<PlayerStatus>(PlayerStatus.Idle)
     private val subtitleUri = mutableStateOf<String?>(null)
     private val subtitleCue = mutableStateOf("")
+    private val subtitleFontSize = mutableStateOf(SubtitlePrefsStore.DEFAULT_FONT_SIZE)
+    private val subtitleVerticalOffset = mutableStateOf(0f)
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -73,6 +75,8 @@ class PickerSurfaceHost(
     var onRemoveBookmark: ((Long) -> Unit)? = null
     var onPickSubtitle: (() -> Unit)? = null
     var onClearSubtitle: (() -> Unit)? = null
+    var onSubtitleFontSizeChange: ((Int) -> Unit)? = null
+    var onSubtitleVerticalOffsetChange: ((Float) -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
     fun acquirePickerSurface(textureId: Int): Surface {
@@ -165,6 +169,14 @@ class PickerSurfaceHost(
         subtitleCue.value = text
     }
 
+    fun setSubtitleFontSize(sp: Int) {
+        subtitleFontSize.value = sp
+    }
+
+    fun setSubtitleVerticalOffset(offset: Float) {
+        subtitleVerticalOffset.value = offset
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -236,8 +248,18 @@ class PickerSurfaceHost(
                     playerStatus = playerStatus.value,
                     subtitleUri = subtitleUri.value,
                     subtitleCue = subtitleCue.value,
+                    subtitleFontSize = subtitleFontSize.value,
+                    subtitleVerticalOffset = subtitleVerticalOffset.value,
                     onPickSubtitle = { onPickSubtitle?.invoke() },
                     onClearSubtitle = { onClearSubtitle?.invoke() },
+                    onSubtitleFontSizeChange = { sp ->
+                        subtitleFontSize.value = sp
+                        onSubtitleFontSizeChange?.invoke(sp)
+                    },
+                    onSubtitleVerticalOffsetChange = { off ->
+                        subtitleVerticalOffset.value = off
+                        onSubtitleVerticalOffsetChange?.invoke(off)
+                    },
                 )
             }
             measure(

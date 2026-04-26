@@ -40,12 +40,13 @@ import timber.log.Timber
 class SubtitleSurfaceHost(
     private val context: Context,
     val width: Int = 1024,
-    val height: Int = 192,
+    val height: Int = 256,
 ) {
     private var surfaceTexture: SurfaceTexture? = null
     private var surface: Surface? = null
     private var composeView: ComposeView? = null
     private val cueText = mutableStateOf("")
+    private val fontSizeSp = mutableStateOf(SubtitlePrefsStore.DEFAULT_FONT_SIZE)
 
     fun acquireSubtitleSurface(textureId: Int): Surface {
         val st = SurfaceTexture(textureId).apply {
@@ -80,6 +81,15 @@ class SubtitleSurfaceHost(
 
     fun cue(): String = cueText.value
 
+    /** Update the visual font size. Backed by Compose state so the
+     *  next pumpFrame redraws with the new size. */
+    fun setFontSize(sp: Int) {
+        fontSizeSp.value = sp.coerceIn(
+            SubtitlePrefsStore.MIN_FONT_SIZE,
+            SubtitlePrefsStore.MAX_FONT_SIZE,
+        )
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -96,6 +106,7 @@ class SubtitleSurfaceHost(
         val cv = ComposeView(context).apply {
             setContent {
                 val t = remember { cueText }
+                val sz = remember { fontSizeSp }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -105,7 +116,7 @@ class SubtitleSurfaceHost(
                     Text(
                         text = t.value,
                         color = ComposeColor.White,
-                        fontSize = 32.sp,
+                        fontSize = sz.value.sp,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                     )

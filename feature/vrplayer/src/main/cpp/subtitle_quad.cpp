@@ -48,6 +48,7 @@ GLint sLocTexMat = -1;
 GLuint sVao = 0;
 GLuint sVbo = 0;
 bool sVisible = false;
+float sOffsetY = 0.f;
 
 GLuint compile(GLenum type, const char* src) {
     GLuint sh = glCreateShader(type);
@@ -117,14 +118,25 @@ void SubtitleQuad::shutdown() {
 
 void SubtitleQuad::setVisible(bool v) { sVisible = v; }
 bool SubtitleQuad::visible() { return sVisible; }
+void SubtitleQuad::setVerticalOffset(float m) { sOffsetY = m; }
 
 void SubtitleQuad::draw(uint32_t externalOesTexId, const float* proj,
                         const float* view, const float* texMatrix) {
     if (!sVisible) return;
     glUseProgram(sProgram);
 
+    // model = translate(0, sOffsetY, 0). Column-major so element [13]
+    // is the Y component of the translation column. Identity otherwise.
+    float model[16] = {
+        1.f, 0.f, 0.f, 0.f,
+        0.f, 1.f, 0.f, 0.f,
+        0.f, 0.f, 1.f, 0.f,
+        0.f, sOffsetY, 0.f, 1.f,
+    };
+    float vm[16];
+    mu::multiply(view, model, vm);
     float mvp[16];
-    mu::multiply(proj, view, mvp);
+    mu::multiply(proj, vm, mvp);
     glUniformMatrix4fv(sLocMvp, 1, GL_FALSE, mvp);
     if (sLocTexMat >= 0) {
         glUniformMatrix4fv(sLocTexMat, 1, GL_FALSE, texMatrix);
