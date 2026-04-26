@@ -22,8 +22,14 @@ jmethodID VideoBridge::sGetPickerTexMat = nullptr;
 jmethodID VideoBridge::sInjectPickerTap = nullptr;
 jmethodID VideoBridge::sPickerWidth = nullptr;
 jmethodID VideoBridge::sPickerHeight = nullptr;
+jmethodID VideoBridge::sAcquireSubtitle = nullptr;
+jmethodID VideoBridge::sUpdateSubtitle = nullptr;
+jmethodID VideoBridge::sGetSubtitleTexMat = nullptr;
+jmethodID VideoBridge::sSubtitleWidth = nullptr;
+jmethodID VideoBridge::sSubtitleHeight = nullptr;
 uint32_t VideoBridge::sTextureId = 0;
 uint32_t VideoBridge::sPickerTexId = 0;
+uint32_t VideoBridge::sSubtitleTexId = 0;
 
 namespace {
 JavaVM* sVm = nullptr;
@@ -70,6 +76,14 @@ void VideoBridge::attach(JNIEnv* env, jobject xrActivity) {
     sInjectPickerTap = env->GetMethodID(cls, "injectPickerTap", "(FF)V");
     sPickerWidth = env->GetMethodID(cls, "pickerWidth", "()I");
     sPickerHeight = env->GetMethodID(cls, "pickerHeight", "()I");
+    sAcquireSubtitle =
+        env->GetMethodID(cls, "acquireSubtitleSurface",
+                         "(I)Landroid/view/Surface;");
+    sUpdateSubtitle = env->GetMethodID(cls, "updateSubtitleTexImage", "()Z");
+    sGetSubtitleTexMat =
+        env->GetMethodID(cls, "getSubtitleTransformMatrix", "([F)V");
+    sSubtitleWidth = env->GetMethodID(cls, "subtitleWidth", "()I");
+    sSubtitleHeight = env->GetMethodID(cls, "subtitleHeight", "()I");
     env->DeleteLocalRef(cls);
 
     if (!sAcquireSurface || !sUpdateTexImage || !sGetTransformMatrix) {
@@ -84,11 +98,14 @@ void VideoBridge::detach(JNIEnv* env) {
     sTogglePlayPause = sSeekDelta = sVolumeDelta = sPersistTransform = nullptr;
     sAcquirePicker = sUpdatePicker = sGetPickerTexMat = nullptr;
     sInjectPickerTap = sPickerWidth = sPickerHeight = nullptr;
+    sAcquireSubtitle = sUpdateSubtitle = sGetSubtitleTexMat = nullptr;
+    sSubtitleWidth = sSubtitleHeight = nullptr;
     // GL textures live on the render thread's context which is torn down
     // alongside the activity, so reset the cached id to force a re-allocate
     // on the next attach (avoids handing Kotlin a stale handle on relaunch).
     sTextureId = 0;
     sPickerTexId = 0;
+    sSubtitleTexId = 0;
 }
 
 void VideoBridge::requestSurface() {
@@ -274,6 +291,82 @@ int VideoBridge::pickerHeight() {
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
         h = 720;
+    }
+    detachEnv(need);
+    return static_cast<int>(h);
+}
+
+void VideoBridge::requestSubtitleSurface() {
+    if (!sActivityRef || !sAcquireSubtitle) return;
+    if (sSubtitleTexId == 0) sSubtitleTexId = GlRenderer::createVideoTexture();
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    jobject s = env->CallObjectMethod(sActivityRef, sAcquireSubtitle,
+                                       static_cast<jint>(sSubtitleTexId));
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (s) env->DeleteLocalRef(s);
+    detachEnv(need);
+}
+
+void VideoBridge::updateSubtitleTexImage() {
+    if (!sActivityRef || !sUpdateSubtitle) return;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    env->CallBooleanMethod(sActivityRef, sUpdateSubtitle);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    detachEnv(need);
+}
+
+void VideoBridge::getSubtitleTransformMatrix(float out[16]) {
+    for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
+    if (!sActivityRef || !sGetSubtitleTexMat) return;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return;
+    jfloatArray arr = env->NewFloatArray(16);
+    env->CallVoidMethod(sActivityRef, sGetSubtitleTexMat, arr);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        for (int i = 0; i < 16; ++i) out[i] = (i % 5 == 0) ? 1.f : 0.f;
+    } else {
+        env->GetFloatArrayRegion(arr, 0, 16, out);
+    }
+    env->DeleteLocalRef(arr);
+    detachEnv(need);
+}
+
+int VideoBridge::subtitleWidth() {
+    if (!sActivityRef || !sSubtitleWidth) return 1024;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return 1024;
+    jint w = env->CallIntMethod(sActivityRef, sSubtitleWidth);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        w = 1024;
+    }
+    detachEnv(need);
+    return static_cast<int>(w);
+}
+
+int VideoBridge::subtitleHeight() {
+    if (!sActivityRef || !sSubtitleHeight) return 192;
+    bool need = false;
+    JNIEnv* env = attachEnv(&need);
+    if (!env) return 192;
+    jint h = env->CallIntMethod(sActivityRef, sSubtitleHeight);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        h = 192;
     }
     detachEnv(need);
     return static_cast<int>(h);

@@ -2,6 +2,8 @@
 #include "skybox.h"
 #include "sphere.h"
 #include "stereo.h"
+#include "subtitle_quad.h"
+#include "video_bridge.h"
 
 #include <jni.h>
 
@@ -67,6 +69,19 @@ Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetEnvironmen
     }
     vrplayer::Skybox::setMode(m);
     VRP_LOGI("Environment mode -> %d", mode);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_anilbeesetti_nextplayer_feature_vrplayer_XrActivity_nativeSetSubtitleVisible(
+    JNIEnv*, jobject, jboolean visible) {
+    // First-time make-visible needs to ensure the GL texture + Surface
+    // exist on the render thread side; mirror what the picker does
+    // when the user opens the menu for the first time.
+    bool v = (visible == JNI_TRUE);
+    vrplayer::SubtitleQuad::setVisible(v);
+    if (v && vrplayer::VideoBridge::subtitleTextureId() == 0) {
+        vrplayer::VideoBridge::requestSubtitleSurface();
+    }
 }
 
 }  // extern "C"

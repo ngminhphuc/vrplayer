@@ -4,6 +4,7 @@
 #include "math_util.h"
 #include "picker_quad.h"
 #include "pointer.h"
+#include "subtitle_quad.h"
 #include "quad.h"
 #include "screen.h"
 #include "skybox.h"
@@ -60,12 +61,14 @@ bool GlRenderer::init() {
     Skybox::init();
     Pointer::init();
     PickerQuad::init();
+    SubtitleQuad::init();
     Sphere::init();
     return true;
 }
 
 void GlRenderer::shutdown() {
     Sphere::shutdown();
+    SubtitleQuad::shutdown();
     PickerQuad::shutdown();
     Pointer::shutdown();
     Skybox::shutdown();
@@ -151,6 +154,17 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
         VideoBridge::getPickerTransformMatrix(pickerTexMat);
         PickerQuad::draw(VideoBridge::pickerTextureId(), proj, viewMat,
                          pickerTexMat);
+    }
+
+    // 3b. Subtitle quad (alpha-blended) below the cinema screen.
+    //     Visible only while the current cue is non-empty; visibility
+    //     is toggled from Kotlin via setSubtitleVisible().
+    if (SubtitleQuad::visible() && VideoBridge::subtitleTextureId() != 0) {
+        VideoBridge::updateSubtitleTexImage();
+        float subTexMat[16];
+        VideoBridge::getSubtitleTransformMatrix(subTexMat);
+        SubtitleQuad::draw(VideoBridge::subtitleTextureId(), proj, viewMat,
+                           subTexMat);
     }
 
     // 4. Laser pointers from active controllers.
