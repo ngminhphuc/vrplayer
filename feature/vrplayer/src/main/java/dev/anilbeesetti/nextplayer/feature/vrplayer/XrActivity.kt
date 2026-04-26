@@ -136,8 +136,16 @@ class XrActivity : NativeActivity() {
         }
         pickerHost.onSmbPlay = { server, path ->
             val cleanPath = path.trim('/', '\\').replace('\\', '/')
-            val uri = "smb://${server.host}/${server.share}/$cleanPath"
-            playUrl(uri)
+            // Use Uri.Builder so reserved chars in filenames (#, ?, %, space)
+            // get percent-encoded. Raw "smb://host/share/movie #2.mkv" would
+            // be parsed by Uri.parse as fragment "2.mkv" and SmbDataSource
+            // would then try to open the wrong (truncated) path.
+            val builder = android.net.Uri.Builder()
+                .scheme("smb")
+                .authority(server.host)
+                .appendPath(server.share)
+            cleanPath.split('/').filter { it.isNotEmpty() }.forEach { builder.appendPath(it) }
+            playUrl(builder.build().toString())
         }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
