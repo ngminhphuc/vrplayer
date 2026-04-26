@@ -17,6 +17,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.MediaStoreScanner
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PickerSurfaceHost
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.PlayerStatus
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.ResumeStore
+import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.SubtitleStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.UrlHistoryStore
 import dev.anilbeesetti.nextplayer.feature.vrplayer.picker.VideoEntry
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ABLoop
@@ -65,6 +66,8 @@ class XrActivity : NativeActivity() {
     private val urlStore by lazy { UrlHistoryStore(this) }
     private val smbStore by lazy { SmbServerStore(this) }
     private val bookmarkStore by lazy { BookmarkStore(this) }
+    private val subtitleStore by lazy { SubtitleStore(this) }
+    private var currentCue = ""
     private val abLoop = ABLoop()
     private val pickerHost by lazy { PickerSurfaceHost(this) }
     private val sleepTimer by lazy {
@@ -162,6 +165,8 @@ class XrActivity : NativeActivity() {
         pickerHost.onAddBookmark = { addBookmark() }
         pickerHost.onSeekBookmark = { ms -> seekToBookmark(ms) }
         pickerHost.onRemoveBookmark = { ms -> removeBookmark(ms) }
+        pickerHost.onPickSubtitle = { launchSubtitlePicker() }
+        pickerHost.onClearSubtitle = { setExternalSubtitle(null) }
         pickerHost.setProjectionMode(projectionOverride)
         pickerHost.setStereoMode(stereoOverride)
         // Restore environment preference and push to native immediately so
@@ -190,7 +195,7 @@ class XrActivity : NativeActivity() {
         applyProjectionFor(trimmed)
         runOnUiThread {
             player?.run {
-                setMediaItem(MediaItem.fromUri(trimmed))
+                setMediaItem(buildMediaItem(trimmed))
                 prepare()
                 seekTo(resumeStore.load(trimmed))
                 playWhenReady = true
@@ -207,7 +212,7 @@ class XrActivity : NativeActivity() {
         val uri = resumePath ?: "asset:///sample/spike0_sample.mp4"
         currentPath = resumePath
         player?.run {
-            setMediaItem(MediaItem.fromUri(uri))
+            setMediaItem(buildMediaItem(uri))
             prepare()
             seekTo(resumePos)
             playWhenReady = true
@@ -231,7 +236,7 @@ class XrActivity : NativeActivity() {
         applyProjectionFor(entry.path)
         runOnUiThread {
             player?.run {
-                setMediaItem(MediaItem.fromUri(entry.path))
+                setMediaItem(buildMediaItem(entry.path))
                 prepare()
                 seekTo(resume)
                 playWhenReady = true
@@ -354,6 +359,10 @@ class XrActivity : NativeActivity() {
         abLoop.clear()
         pickerHost.setAbLoop(-1L, -1L)
         pickerHost.setBookmarks(bookmarkPositions(path))
+        // Push the persisted subtitle association into the picker so the
+        // Subtitle tab shows whether a sidecar is linked for this file.
+        pickerHost.setSubtitleUri(subtitleStore.get(path))
+        pickerHost.setSubtitleCue("")
     }
 
     override fun onDestroy() {
@@ -379,6 +388,107 @@ class XrActivity : NativeActivity() {
                 true
             }
             else -> super.onKeyDown(keyCode, event)
+        }
+    }
+
+    /** Build a MediaItem with optional sidecar subtitle from SubtitleStore.
+     *  Use this everywhere instead of MediaItem.fromUri so any caller
+     *  benefits from per-file external SRT/VTT side-loading. */
+    private fun buildMediaItem(uri: String): MediaItem {
+        val sub = subtitleStore.get(uri)
+        if (sub.isNullOrBlank()) return MediaItem.fromUri(uri)
+        val subUri = android.net.Uri.parse(sub)
+        val cfg = MediaItem.SubtitleConfiguration.Builder(subUri)
+            .setMimeType(guessSubtitleMime(subUri))
+            .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+            .build()
+        return MediaItem.Builder()
+            .setUri(uri)
+            .setSubtitleConfigurations(listOf(cfg))
+            .build()
+    }
+
+    /** Resolve the subtitle MIME type by looking up the display name via
+     *  the ContentResolver. Naively splitting on the last `.` of a SAF
+     *  content URI can match dots inside the authority (e.g.
+     *  `com.android.providers.downloads.documents`) instead of the file
+     *  extension, which would silently fall through to SubRip and
+     *  garble VTT/ASS/TTML content. */
+    private fun guessSubtitleMime(contentUri: android.net.Uri): String {
+        val displayName = runCatching {
+            contentResolver.query(
+                contentUri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()
+        val ext = (displayName ?: contentUri.toString())
+            .substringAfterLast('.', "")
+            .lowercase()
+        return when (ext) {
+            "vtt" -> androidx.media3.common.MimeTypes.TEXT_VTT
+            "srt", "subrip" -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+            "ssa", "ass" -> androidx.media3.common.MimeTypes.TEXT_SSA
+            "ttml", "xml", "dfxp" -> androidx.media3.common.MimeTypes.APPLICATION_TTML
+            else -> androidx.media3.common.MimeTypes.APPLICATION_SUBRIP
+        }
+    }
+
+    /** Open Storage Access Framework picker so the user can browse for an
+     *  external SRT/VTT/ASS/TTML next to the video. We use SAF + content://
+     *  URIs so we don't need MANAGE_EXTERNAL_STORAGE on Android 13+. */
+    private fun launchSubtitlePicker() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(
+                android.content.Intent.EXTRA_MIME_TYPES,
+                arrayOf("text/*", "application/x-subrip", "application/ttml+xml"),
+            )
+        runCatching { startActivityForResult(intent, REQ_PICK_SUBTITLE) }
+            .onFailure { Timber.tag(TAG).e(it, "subtitle picker launch failed") }
+    }
+
+    @Deprecated("NativeActivity inherits this; use SAF result here.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_SUBTITLE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            // Persist URI permission so SAF still resolves it after process
+            // restart; without this the user has to re-pick on every launch.
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            setExternalSubtitle(uri.toString())
+        }
+    }
+
+    fun setExternalSubtitle(subtitleUri: String?) {
+        val key = currentPath ?: return
+        subtitleStore.set(key, subtitleUri)
+        // Push fresh state into the picker. Without this the Subtitle tab
+        // would show stale data because resetPerFileState only fires on
+        // file change, not on add/remove of subtitle for the same file.
+        pickerHost.setSubtitleUri(subtitleUri)
+        pickerHost.setSubtitleCue("")
+        // Preserve the user's pause/play intent. setExternalSubtitle is a
+        // mid-playback swap of the same file, not a fresh start, so forcing
+        // playWhenReady=true would resume a paused video the moment the
+        // user picks or clears a sidecar.
+        val wasPlaying = player?.playWhenReady ?: true
+        val pos = player?.currentPosition ?: 0L
+        runOnUiThread {
+            player?.run {
+                setMediaItem(buildMediaItem(key))
+                prepare()
+                seekTo(pos)
+                playWhenReady = wasPlaying
+            }
         }
     }
 
@@ -417,6 +527,15 @@ class XrActivity : NativeActivity() {
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 pickerHost.setPlayerStatus(PlayerStatus.Error(error.errorCodeName + ": " + (error.message ?: "")))
+            }
+
+            override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                // Concatenate all cues at this timestamp; ExoPlayer hands us
+                // one CueGroup per timed-text update, so this string is the
+                // text the user should see right now (empty == clear).
+                val joined = cueGroup.cues.joinToString("\n") { it.text?.toString().orEmpty() }
+                currentCue = joined
+                pickerHost.setSubtitleCue(joined)
             }
         })
         player = exo
@@ -590,6 +709,7 @@ class XrActivity : NativeActivity() {
         private const val KEY_Y_OFFSET = "y_off"
         private const val KEY_Z_OFFSET = "z_off"
         private const val KEY_ENV = "env_mode"
+        private const val REQ_PICK_SUBTITLE = 0x5172
 
         init {
             // Loaded by NativeActivity via android.app.lib_name meta-data, but

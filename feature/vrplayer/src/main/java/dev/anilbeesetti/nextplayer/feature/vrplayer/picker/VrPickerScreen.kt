@@ -41,7 +41,7 @@ import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.ProjectionMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.playback.StereoMode
 import dev.anilbeesetti.nextplayer.feature.vrplayer.smb.SmbServer
 
-private enum class PickerTab { Local, Network, Smb, Playback, Settings, About }
+private enum class PickerTab { Local, Network, Smb, Playback, Subtitle, Settings, About }
 
 /**
  * World-space picker UI — designed to render into a 1.2 m × 0.8 m quad in
@@ -80,6 +80,10 @@ fun VrPickerScreen(
     onSeekBookmark: (Long) -> Unit = {},
     onRemoveBookmark: (Long) -> Unit = {},
     playerStatus: PlayerStatus = PlayerStatus.Idle,
+    subtitleUri: String? = null,
+    subtitleCue: String = "",
+    onPickSubtitle: () -> Unit = {},
+    onClearSubtitle: () -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(PickerTab.Local) }
     MaterialTheme(colorScheme = vrColorScheme) {
@@ -109,6 +113,12 @@ fun VrPickerScreen(
                         onAddBookmark,
                         onSeekBookmark,
                         onRemoveBookmark,
+                    )
+                    PickerTab.Subtitle -> SubtitleTab(
+                        subtitleUri,
+                        subtitleCue,
+                        onPickSubtitle,
+                        onClearSubtitle,
                     )
                     PickerTab.About -> AboutTab()
                     PickerTab.Settings -> SettingsTab(
@@ -260,6 +270,55 @@ private fun NetworkTab(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleTab(
+    subtitleUri: String?,
+    subtitleCue: String,
+    onPickSubtitle: () -> Unit,
+    onClearSubtitle: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Phụ đề", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Chọn file .srt / .vtt / .ass / .ttml ngoài để phát kèm video. Liên kết lưu vĩnh viễn theo từng path.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 16.sp,
+        )
+        if (subtitleUri == null) {
+            Text("Chưa liên kết file phụ đề.", color = Color(0xFF9AA3B0), fontSize = 16.sp)
+        } else {
+            Text(
+                "Đang dùng: ${subtitleUri.substringAfterLast('/').take(80)}",
+                color = Color(0xFFB8E6FF),
+                fontSize = 14.sp,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip(label = "Chọn file", selected = false, onClick = onPickSubtitle)
+            TabChip(label = "Bỏ phụ đề", selected = false, onClick = onClearSubtitle)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Cue hiện tại", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "Đoạn phụ đề ExoPlayer đang hiển thị. Đây là preview — phiên bản render head-locked sẽ vào sprint sau.",
+            color = Color(0xFF9AA3B0),
+            fontSize = 14.sp,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF0A0E14),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Text(
+                text = subtitleCue.ifBlank { "(không có)" },
+                color = Color.White,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(16.dp),
+            )
         }
     }
 }

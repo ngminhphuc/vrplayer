@@ -51,6 +51,8 @@ class PickerSurfaceHost(
     private val abPointB = mutableStateOf(-1L)
     private val bookmarks: SnapshotStateList<Long> = mutableListOf<Long>().toMutableStateList()
     private val playerStatus = mutableStateOf<PlayerStatus>(PlayerStatus.Idle)
+    private val subtitleUri = mutableStateOf<String?>(null)
+    private val subtitleCue = mutableStateOf("")
 
     var onPick: ((VideoEntry) -> Unit)? = null
     var onPickUrl: ((String) -> Unit)? = null
@@ -69,6 +71,8 @@ class PickerSurfaceHost(
     var onAddBookmark: (() -> Unit)? = null
     var onSeekBookmark: ((Long) -> Unit)? = null
     var onRemoveBookmark: ((Long) -> Unit)? = null
+    var onPickSubtitle: (() -> Unit)? = null
+    var onClearSubtitle: (() -> Unit)? = null
 
     /** Native side calls this when its OES texture is allocated. */
     fun acquirePickerSurface(textureId: Int): Surface {
@@ -153,6 +157,14 @@ class PickerSurfaceHost(
         playerStatus.value = status
     }
 
+    fun setSubtitleUri(uri: String?) {
+        subtitleUri.value = uri
+    }
+
+    fun setSubtitleCue(text: String) {
+        subtitleCue.value = text
+    }
+
     fun updateTexImage(): Boolean {
         return runCatching {
             surfaceTexture?.updateTexImage()
@@ -222,6 +234,10 @@ class PickerSurfaceHost(
                     onSeekBookmark = { ms -> onSeekBookmark?.invoke(ms) },
                     onRemoveBookmark = { ms -> onRemoveBookmark?.invoke(ms) },
                     playerStatus = playerStatus.value,
+                    subtitleUri = subtitleUri.value,
+                    subtitleCue = subtitleCue.value,
+                    onPickSubtitle = { onPickSubtitle?.invoke() },
+                    onClearSubtitle = { onClearSubtitle?.invoke() },
                 )
             }
             measure(
