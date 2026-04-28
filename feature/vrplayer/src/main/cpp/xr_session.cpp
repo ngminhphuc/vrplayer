@@ -423,6 +423,10 @@ void XrSession::renderFrame() {
                       static_cast<uint32_t>(mViews.size()), &viewCount,
                       mViews.data());
 
+        // Pull SurfaceTexture frames once per frame so both eyes sample
+        // the same decoded video / picker / subtitle pixels.
+        GlRenderer::beginFrame();
+
         projViews.resize(viewCount);
         for (uint32_t i = 0; i < viewCount; ++i) {
             auto& sc = mSwapchains[i];

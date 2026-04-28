@@ -24,8 +24,18 @@ public:
     static bool init();
     static void shutdown();
 
+    /** Pulls the latest video / picker / subtitle frames from their
+     *  SurfaceTextures and caches the transform matrices. Must be called
+     *  exactly once per OpenXR frame, before any [renderEye] call.
+     *  Hoisting these updates out of the per-eye loop ensures both eyes
+     *  sample the same decoded frame, avoiding inter-eye binocular
+     *  rivalry when the decoder posts a new frame between left and
+     *  right eye renders. */
+    static void beginFrame();
+
     /** Renders the cinema scene (skybox + curved screen + pointers) into the
-     *  given OpenXR swapchain colour image. */
+     *  given OpenXR swapchain colour image. Must be called after
+     *  [beginFrame] has populated the per-frame texture caches. */
     static void renderEye(uint32_t glTextureId, int32_t width, int32_t height,
                           const XrView& view, int eyeIndex);
 

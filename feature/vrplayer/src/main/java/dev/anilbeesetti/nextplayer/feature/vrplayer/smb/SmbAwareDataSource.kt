@@ -22,7 +22,7 @@ class SmbAwareDataSource(
     private val listeners = mutableListOf<TransferListener>()
 
     override fun open(dataSpec: DataSpec): Long {
-        val ds = if (dataSpec.uri.scheme.equals("smb", ignoreCase = true)) {
+        val ds = if ("smb".equals(dataSpec.uri.scheme, ignoreCase = true)) {
             SmbDataSource(store).also { d ->
                 listeners.forEach { d.addTransferListener(it) }
             }

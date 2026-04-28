@@ -29,6 +29,16 @@ bool sShowRightPointer = false;
 XrPosef sLeftPose{};
 XrPosef sRightPose{};
 
+// Per-frame cached state populated by beginFrame() and consumed by
+// renderEye(). Hoisting the SurfaceTexture updateTexImage / transform
+// queries out of the per-eye loop guarantees both eyes sample the same
+// decoded frame.
+float sVideoTexMatrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+float sPickerTexMatrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+float sSubtitleTexMatrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+bool sPickerHasFrame = false;
+bool sSubtitleHasFrame = false;
+
 // Build a column-major 4x4 that scales the input UV (treated as the .xy of
 // a vec4) and adds an offset. Used to crop the video texture into per-eye
 // halves for SBS / TB stereo content.
@@ -100,6 +110,38 @@ void GlRenderer::setPointer(bool leftActive, const XrPosef& leftPose,
     sRightPose = rightPose;
 }
 
+void GlRenderer::beginFrame() {
+    // Pull video frame once per OpenXR frame so both eyes sample identical
+    // pixels even if the decoder posts a new frame between left and right
+    // eye renders.
+    VideoBridge::updateTexImage();
+    VideoBridge::getTransformMatrix(sVideoTexMatrix);
+
+    // Picker surface — only relevant when the picker is on screen.
+    if (PickerQuad::visible() && VideoBridge::pickerTextureId() != 0) {
+        VideoBridge::updatePickerTexImage();
+        VideoBridge::getPickerTransformMatrix(sPickerTexMatrix);
+        sPickerHasFrame = true;
+    } else {
+        sPickerHasFrame = false;
+    }
+
+    // Subtitle surface — lazily allocated on the render thread (this thread)
+    // because requestSubtitleSurface() calls glGenTextures and needs the GL
+    // context current.
+    sSubtitleHasFrame = false;
+    if (SubtitleQuad::visible()) {
+        if (VideoBridge::subtitleTextureId() == 0) {
+            VideoBridge::requestSubtitleSurface();
+        }
+        if (VideoBridge::subtitleTextureId() != 0) {
+            VideoBridge::updateSubtitleTexImage();
+            VideoBridge::getSubtitleTransformMatrix(sSubtitleTexMatrix);
+            sSubtitleHasFrame = true;
+        }
+    }
+}
+
 void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
                            const XrView& view, int eyeIndex) {
     ensureDepth(width, height);
@@ -127,10 +169,6 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
     // 1. Skybox (full-screen, depth write off).
     Skybox::draw();
 
-    VideoBridge::updateTexImage();
-    float texMatrix[16];
-    VideoBridge::getTransformMatrix(texMatrix);
-
     // Compose stereo UV crop (right-multiply) so each eye samples its half
     // of the texture. For mono this is identity → behaves as before.
     float stereoCrop[16];
@@ -138,7 +176,7 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
     Stereo::uvScaleOffset(eyeIndex, stereoUv);
     buildStereoCrop(stereoUv, stereoCrop);
     float texMatrixEye[16];
-    mu::multiply(texMatrix, stereoCrop, texMatrixEye);
+    mu::multiply(sVideoTexMatrix, stereoCrop, texMatrixEye);
 
     // 2. Either the cinema cylinder OR the immersive 360/180 sphere.
     if (Sphere::mode() == Sphere::Mode::Off) {
@@ -147,32 +185,19 @@ void GlRenderer::renderEye(uint32_t glTextureId, int32_t width, int32_t height,
         Sphere::draw(VideoBridge::textureId(), proj, viewMat, texMatrixEye);
     }
 
-    // 3. Picker (if visible). Pull its surface texture too.
-    if (PickerQuad::visible() && VideoBridge::pickerTextureId() != 0) {
-        VideoBridge::updatePickerTexImage();
-        float pickerTexMat[16];
-        VideoBridge::getPickerTransformMatrix(pickerTexMat);
+    // 3. Picker (if visible). Texture was updated in beginFrame.
+    if (PickerQuad::visible() && sPickerHasFrame) {
         PickerQuad::draw(VideoBridge::pickerTextureId(), proj, viewMat,
-                         pickerTexMat);
+                         sPickerTexMatrix);
     }
 
     // 3b. Subtitle quad (alpha-blended) below the cinema screen.
     //     Visible only while the current cue is non-empty; visibility
-    //     is toggled from Kotlin via nativeSetSubtitleVisible(). Lazily
-    //     create the OES texture + Surface here on the render thread,
-    //     where the GL context is current — calling this from the JNI
-    //     thread would silently no-op glGenTextures.
-    if (SubtitleQuad::visible()) {
-        if (VideoBridge::subtitleTextureId() == 0) {
-            VideoBridge::requestSubtitleSurface();
-        }
-        if (VideoBridge::subtitleTextureId() != 0) {
-            VideoBridge::updateSubtitleTexImage();
-            float subTexMat[16];
-            VideoBridge::getSubtitleTransformMatrix(subTexMat);
-            SubtitleQuad::draw(VideoBridge::subtitleTextureId(), proj, viewMat,
-                               subTexMat);
-        }
+    //     is toggled from Kotlin via nativeSetSubtitleVisible(). Texture
+    //     was updated in beginFrame.
+    if (SubtitleQuad::visible() && sSubtitleHasFrame) {
+        SubtitleQuad::draw(VideoBridge::subtitleTextureId(), proj, viewMat,
+                           sSubtitleTexMatrix);
     }
 
     // 4. Laser pointers from active controllers.
