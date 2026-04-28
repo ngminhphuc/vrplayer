@@ -145,8 +145,9 @@ void XrInput::sync(XrSession session, XrSpace baseSpace,
 
     const bool trigL = readBool(mTrigger, mLeftSubaction);
     const bool trigR = readBool(mTrigger, mRightSubaction);
-    triggerPressedEdge = (!mPrevTriggerLeft && trigL) ||
-                          (!mPrevTriggerRight && trigR);
+    triggerLeftEdge = !mPrevTriggerLeft && trigL;
+    triggerRightEdge = !mPrevTriggerRight && trigR;
+    triggerPressedEdge = triggerLeftEdge || triggerRightEdge;
     mPrevTriggerLeft = trigL;
     mPrevTriggerRight = trigR;
 
