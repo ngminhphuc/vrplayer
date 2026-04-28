@@ -18,9 +18,6 @@ add_library(native_app_glue STATIC
     ${NATIVE_APP_GLUE_DIR}/android_native_app_glue.c
 )
 target_include_directories(native_app_glue PUBLIC ${NATIVE_APP_GLUE_DIR})
-# Force the entry-point symbol to be kept (NativeActivity dlsym's it).
-set_target_properties(native_app_glue PROPERTIES
-    INTERFACE_LINK_OPTIONS "-u ANativeActivity_onCreate")
 
 add_library(vrplayer SHARED
     main.cpp
@@ -41,6 +38,19 @@ add_library(vrplayer SHARED
 )
 
 target_include_directories(vrplayer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# NativeActivity dlsym's ANativeActivity_onCreate at runtime; the linker
+# would otherwise garbage-collect the unreferenced glue symbol from the
+# static archive. -Wl,--whole-archive forces every object from the glue
+# archive into libvrplayer.so. This is the pattern used by Khronos'
+# hello_xr sample. -u as a single space-separated string in
+# INTERFACE_LINK_OPTIONS doesn't survive CMake's option flattening, which
+# is what caused the previous "undefined symbol: ANativeActivity_onCreate"
+# UnsatisfiedLinkError on app launch.
+target_link_options(vrplayer PRIVATE
+    "LINKER:--whole-archive,$<TARGET_FILE:native_app_glue>,--no-whole-archive"
+    "-u" "ANativeActivity_onCreate"
+)
 
 target_link_libraries(vrplayer
     native_app_glue
