@@ -6,6 +6,8 @@
 #include <GLES3/gl3.h>
 #include <GLES2/gl2ext.h>
 
+#include <atomic>
+
 namespace vrplayer {
 
 namespace {
@@ -47,8 +49,12 @@ GLint sLocMvp = -1;
 GLint sLocTexMat = -1;
 GLuint sVao = 0;
 GLuint sVbo = 0;
-bool sVisible = false;
-float sOffsetY = 0.f;
+// Cross-thread state: written from the JNI/main thread (Kotlin
+// XrActivity → native_calls.cpp) and read from the native render
+// thread. Use atomics with acquire/release ordering, matching the
+// pattern in Sphere/Stereo/Skybox.
+std::atomic<bool> sVisible{false};
+std::atomic<float> sOffsetY{0.f};
 
 GLuint compile(GLenum type, const char* src) {
     GLuint sh = glCreateShader(type);
@@ -116,22 +122,29 @@ void SubtitleQuad::shutdown() {
     sVbo = sVao = sProgram = 0;
 }
 
-void SubtitleQuad::setVisible(bool v) { sVisible = v; }
-bool SubtitleQuad::visible() { return sVisible; }
-void SubtitleQuad::setVerticalOffset(float m) { sOffsetY = m; }
+void SubtitleQuad::setVisible(bool v) {
+    sVisible.store(v, std::memory_order_release);
+}
+bool SubtitleQuad::visible() {
+    return sVisible.load(std::memory_order_acquire);
+}
+void SubtitleQuad::setVerticalOffset(float m) {
+    sOffsetY.store(m, std::memory_order_release);
+}
 
 void SubtitleQuad::draw(uint32_t externalOesTexId, const float* proj,
                         const float* view, const float* texMatrix) {
-    if (!sVisible) return;
+    if (!sVisible.load(std::memory_order_acquire)) return;
     glUseProgram(sProgram);
 
-    // model = translate(0, sOffsetY, 0). Column-major so element [13]
+    const float offsetY = sOffsetY.load(std::memory_order_acquire);
+    // model = translate(0, offsetY, 0). Column-major so element [13]
     // is the Y component of the translation column. Identity otherwise.
     float model[16] = {
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
         0.f, 0.f, 1.f, 0.f,
-        0.f, sOffsetY, 0.f, 1.f,
+        0.f, offsetY, 0.f, 1.f,
     };
     float vm[16];
     mu::multiply(view, model, vm);
